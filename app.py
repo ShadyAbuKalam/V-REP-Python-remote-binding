@@ -25,7 +25,7 @@
 #
 # IMPORTANT: for each successful call to simxStart, there
 # should be a corresponding call to simxFinish at the end!
-from robot import *
+from robot import Robot
 try:
     import vrep
 except:
@@ -41,17 +41,18 @@ import time
 import threading
 
 
-
 class Simulator():
     def __init__(self):
-        self.clientID=-1 # The connection id
-        self.run_event = threading.Event() # An event used to stop the loops inside the robot threads
-        self.robots = [] # A list of robots' threads
+        self.clientID = -1  # The connection id
+        # An event used to stop the loops inside the robot threads
+        self.run_event = threading.Event()
+        self.robots = []  # A list of robots' threads
+
     def start(self):
         print('Program started')
         vrep.simxFinish(-1)  # just in case, close all opened connections
         self.clientID = vrep.simxStart('127.0.0.1', 19997, True,
-                                  True, 5000, 5)  # Connect to V-REP
+                                       True, 5000, 5)  # Connect to V-REP
         if self.clientID != -1:
             print('Connected to remote API server')
 
@@ -65,7 +66,7 @@ class Simulator():
                 # Assume that we use K3_robots, so thier names will start with
                 # K3_robot
                 if("K3_robot" in name):
-                    r = robot(name, self.clientID, self.run_event)
+                    r = Robot(name, self)
                     self.robots.append(r)
 
             print("Found {0} robots".format(len(self.robots)))
@@ -73,7 +74,6 @@ class Simulator():
             for r in self.robots:
                 r.start()
             vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_blocking)
-
 
         else:
             print('Failed connecting to remote API server')
@@ -97,6 +97,18 @@ class Simulator():
 
         # Now close the connection to V-REP:
         vrep.simxFinish(self.clientID)
+
+    def broadcast(self, sender, message):
+        status = "Broadcasting message from {0} to {1} robots".format(
+            sender, len(self.robots))
+        vrep.simxAddStatusbarMessage(
+            self.clientID, status, vrep.simx_opmode_blocking)
+        for r in self.robots:
+            if (r == sender):
+                continue
+            r.message_queue.put(message)
+
+
 def main():
     sim = Simulator()
     try:
@@ -110,6 +122,7 @@ def main():
         sim.stop()
         print(e)
     print("Good Bye")
+
 
 if (__name__ == "__main__"):
     main()
