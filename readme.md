@@ -12,7 +12,7 @@
 
 * Server side
   * Make sure that `v_repExtRemoteApi.dll` does exist in root directory of V-REP
-* Client Side (already pushed files with git)
+* Client Side (These files' content varies with V-REP version) 
   * Copy `programming/python/vrep.py` and `programming/python/vrepConst.py` to your project folder.
   * Copy `programming/lib/lib/32Bit/remoteApi.dll` to your project folder.
 
