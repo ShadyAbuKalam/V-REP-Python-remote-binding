@@ -63,9 +63,9 @@ class Simulator():
             returnCode, handles, intData, floatData, stringData = vrep.simxGetObjectGroupData(
                 self.clientID, vrep.sim_object_shape_type, 0, vrep.simx_opmode_blocking)
             for name in stringData:
-                # Assume that we use K3_robots, so thier names will start with
-                # K3_robot
-                if("K3_robot" in name):
+                # Assume that we use DragonOne, so thier names will start with
+                # DragonOne
+                if "DragonOne" in name:
                     r = Robot(name, self)
                     self.robots.append(r)
 

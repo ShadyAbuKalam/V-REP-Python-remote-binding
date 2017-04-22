@@ -21,7 +21,7 @@ class Robot(threading.Thread):
         self.postfix = ""
         try:
 
-            i = self.name.index("#")
+            i = self.name.index("DragonOne")+len("DragonOne")
             self.postfix = self.name[i:]
         except:
             pass
@@ -32,11 +32,11 @@ class Robot(threading.Thread):
 
         # Setup left motor and right motor handles respectively
         returnCode, self.left_motor = vrep.simxGetObjectHandle(
-            self.clientID, "K3_leftWheelMotor{0}".format(self.postfix),
+            self.clientID, "LeftWheelRevolute_joint{0}".format(self.postfix),
             vrep.simx_opmode_blocking)
 
         returnCode, self.right_motor = vrep.simxGetObjectHandle(
-            self.clientID, "K3_rightWheelMotor{0}".format(self.postfix),
+            self.clientID, "RightWheelRevolute_joint{0}".format(self.postfix),
             vrep.simx_opmode_blocking)
 
     def run(self):
