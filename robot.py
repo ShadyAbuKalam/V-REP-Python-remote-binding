@@ -28,7 +28,7 @@ class Robot(threading.Thread):
         if self.message_queue.qsize() > 0:
             msg = self.message_queue.get()
         self.motor1(10)
-        self.motor2(-10)
+        self.motor2(10,False)
 
         detected,distance = self.read_mid_ultra_sonic()
         if detected:
@@ -112,7 +112,7 @@ class Robot(threading.Thread):
         """
         if not isinstance(direction, bool):
             raise ValueError("Parameter direction must be boolean")
-        if not isinstance(value, int) and value > 255:
+        if not isinstance(value, int) and (value > 255 or value <0):
             raise ValueError(
                 "Parameter value must be integer between 0 and 255")
         if not direction:
