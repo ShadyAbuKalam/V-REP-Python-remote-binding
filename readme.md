@@ -1,4 +1,4 @@
-#Remote Binding for V-REP in Python
+# Remote Binding for V-REP in Python
 
 ## Notes:
 1. The application is written in `app.py`.
@@ -8,7 +8,8 @@
 
 ---
 
-##How to setup the binding
+## How to setup the binding
+
 
 * Server side
   * Make sure that `v_repExtRemoteApi.dll` does exist in root directory of V-REP
@@ -17,5 +18,11 @@
   * Copy `programming/lib/lib/32Bit/remoteApi.dll` to your project folder.
 
 * Run steps:
-  1. Run V-REP and open the attached scene.
-  2. Run `app.py` with python via command line.
+  1. Run V-REP and open a new scene.
+  2. Just drag and drop the model into the scene to create a new robot.
+    * You can copy the model file `DragonOne.ttm` to V-REP models folder
+  3. Run `app.py` with python via command line.
+
+### Notes:
+
+* Use V-REP version 3.4 for best compatability.
