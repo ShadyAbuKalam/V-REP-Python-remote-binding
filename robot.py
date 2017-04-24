@@ -117,6 +117,18 @@ class Robot(threading.Thread):
         """
         self.__set_motor(self.right_motor, value, direction)
 
+    def get_left_motor_coordinates(self):
+        """
+        return a tuple contating the coordinates (x,y,z) for the left motor joint in meters
+        """
+        return vrep.simxGetObjectPosition(self.clientID,self.left_motor,-1,vrep.simx_opmode_blocking)[1]
+
+    def get_right_motor_coordinates(self):
+        """
+        return a tuple contating the coordinates (x,y,z) for the right motor joint in meters
+        """
+        return vrep.simxGetObjectPosition(self.clientID,self.right_motor,-1,vrep.simx_opmode_blocking)[1]
+                
     def get_left_motor_ticks(self):
         return self.__left_motor_ticks
 
