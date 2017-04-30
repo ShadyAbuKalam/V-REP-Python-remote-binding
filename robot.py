@@ -22,6 +22,7 @@ class Robot(threading.Thread):
         """
         The analogus of loop() inside microcontoller,write your code inside
         """
+        cs_reading = self.read_color_sensor()
         if self.state == Robot.STOPPED:
             self.motor1(0)
             self.motor2(0)
@@ -84,6 +85,9 @@ class Robot(threading.Thread):
             self.clientID, "RightProximity_sensor{0}".format(self.postfix),
             vrep.simx_opmode_blocking)[1]
 
+        self.color_sensor = vrep.simxGetObjectHandle(
+            self.clientID, "Vision_sensor{0}".format(self.postfix),
+            vrep.simx_opmode_blocking)[1]
         self.__left_motor_ticks = 0
         self.__left_motor_old_position = 0  # This is used to calculate ticks
 
@@ -121,14 +125,14 @@ class Robot(threading.Thread):
         """
         return a tuple contating the coordinates (x,y,z) for the left motor joint in meters
         """
-        return vrep.simxGetObjectPosition(self.clientID,self.left_motor,-1,vrep.simx_opmode_blocking)[1]
+        return vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_blocking)[1]
 
     def get_right_motor_coordinates(self):
         """
         return a tuple contating the coordinates (x,y,z) for the right motor joint in meters
         """
-        return vrep.simxGetObjectPosition(self.clientID,self.right_motor,-1,vrep.simx_opmode_blocking)[1]
-                
+        return vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_blocking)[1]
+
     def get_left_motor_ticks(self):
         return self.__left_motor_ticks
 
@@ -227,6 +231,25 @@ class Robot(threading.Thread):
                 detected_point[0]**2 + detected_point[1]**2 + detected_point[2]**2)
             return (True, distance)
         return (False, None)
+
+    def read_color_sensor(self):
+        """
+        This function returns a list of 4 values: light intensity, red, green, blue averges across the pixels of the detector in case of success,
+        these values range from 0-255. Or it returns None in case of faliures 
+        """
+        if hasattr(self, "__first_color_sensor_read") == False:
+            self.__first_color_sensor_read = True
+            result = vrep.simxReadVisionSensor(
+                self.clientID, self.color_sensor, vrep.simx_opmode_streaming)
+        else:
+            result = vrep.simxReadVisionSensor(
+                self.clientID, self.color_sensor, vrep.simx_opmode_buffer)
+
+        if result[0] != vrep.simx_return_ok :
+            return None
+        
+        result = [e * 255 for e in result[2][0][10:14] ] 
+        return result
 
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
