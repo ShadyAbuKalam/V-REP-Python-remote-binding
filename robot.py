@@ -16,7 +16,7 @@ class Robot(threading.Thread):
         The analogus of setup() inside microcontoller.
         """
 
-        self.state = Robot.RUNNING
+        self.state = Robot.STOPPED
 
     def loop(self):
         """
@@ -26,17 +26,20 @@ class Robot(threading.Thread):
         if self.state == Robot.STOPPED:
             self.motor1(0)
             self.motor2(0)
+            if self.grip():
+                self.state = Robot.RUNNING
+
             return
         print("Let motor ticks {0} , right motor ticks {1}".format(
             self.get_left_motor_ticks(), self.get_right_motor_ticks()))
         if self.message_queue.qsize() > 0:
             msg = self.message_queue.get()
-        self.motor1(10)
-        self.motor2(10, False)
+        self.motor1(13)
+        self.motor2(10)
 
         detected, distance = self.read_mid_ultra_sonic()
         if detected:
-            return
+
             self.state = Robot.STOPPED
             status = ("Robot {0} detected element on distance  : {1}".format(
                 self.name, distance))
@@ -93,6 +96,15 @@ class Robot(threading.Thread):
 
         self.__right_motor_ticks = 0
         self.__right_motor_old_position = 0  # This is used to calculate ticks
+
+        # Gripper handlers
+        self.GripperProxSensor = vrep.simxGetObjectHandle(
+            self.clientID, "RG2_attachProxSensor{0}".format(self.postfix),
+            vrep.simx_opmode_blocking)[1]
+        self.GripperAttachPoint = vrep.simxGetObjectHandle(
+            self.clientID, "RG2_attachPoint{0}".format(self.postfix),
+            vrep.simx_opmode_blocking)[1]
+        self.__GrippedShape = None
         self.setup()
 
     def run(self):
@@ -235,7 +247,7 @@ class Robot(threading.Thread):
     def read_color_sensor(self):
         """
         This function returns a list of 4 values: light intensity, red, green, blue averges across the pixels of the detector in case of success,
-        these values range from 0-255. Or it returns None in case of faliures 
+        these values range from 0-255. Or it returns None in case of failures
         """
         if hasattr(self, "__first_color_sensor_read") == False:
             self.__first_color_sensor_read = True
@@ -245,11 +257,41 @@ class Robot(threading.Thread):
             result = vrep.simxReadVisionSensor(
                 self.clientID, self.color_sensor, vrep.simx_opmode_buffer)
 
-        if result[0] != vrep.simx_return_ok :
+        if result[0] != vrep.simx_return_ok:
             return None
-        
-        result = [e * 255 for e in result[2][0][10:14] ] 
+
+        result = [e * 255 for e in result[2][0][10:14]]
         return result
+
+    def grip(self):
+        """
+        This function simulates a magentic gripping technique as the following: 
+        1. Use ray shaped ultrasonic sensor to detect if there is a shape that can be gripped
+        2. Attach this shape to the a force sensor - used as connector - to the robot
+
+        limitations: 
+        1. It will grip anything can be detected by the ultrasonic sensor used in it
+        2. It will not grip items farther than 2.5 cm (this is adjustable in the model)
+
+        return value: True if gripped an item, otherwise false.
+        """
+        if self.__GrippedShape is not None:
+            return False
+
+        returnCode, detectionState, detectedPoint, detectedObjectHandle, detectedSurfaceNormalVector = vrep.simxReadProximitySensor(
+            self.clientID, self.GripperProxSensor, vrep.simx_opmode_blocking)
+        if returnCode != vrep.simx_return_ok or detectionState is False:
+            return False
+        self.__GrippedShape = detectedObjectHandle
+        returnCode = vrep.simxSetObjectParent(self.clientID, self.__GrippedShape,
+                                 self.GripperAttachPoint, True, vrep.simx_opmode_blocking)
+        return True if returnCode == vrep.simx_return_ok else False
+
+    def degrip(self):
+
+        vrep.simxSetObjectParent(
+            self.clientID, self.__GrippedShape, -1, True, vrep.simx_opmode_blocking)
+        self.__GrippedShape = None
 
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
