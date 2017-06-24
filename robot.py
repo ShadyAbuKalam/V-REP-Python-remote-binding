@@ -1,50 +1,301 @@
 import vrep
 import threading
-import random
 import time
 import math
-from queue import Queue
+from Queue import Queue
 
 
 class Robot(threading.Thread):
-    RUNNING = 0
-    STOPPED = 1
+
+
+    # States
+    SCAN = 0
+    FORAGE = 1
+    CLUSTER = 2
+    FOLLOWER = 3
+    AVOID = 4
+    EXIT = 5
+    STOP = 6
+    
+
+    # Physical properties
+    ROBOT_LENGTH = 0.174
+    ROBOT_WIDTH = 0.11
+    WHEEL_R = 33e-3
+    WHEEL_L = 92e-3
     TICKS_PER_REVOLUTION = 16
+    METERS_PER_TICK = (2 * math.pi * WHEEL_R) / TICKS_PER_REVOLUTION
+
+    # Params
+    length_arena = 0
+    width_arena = 0
+
+    DISTANCE_DECREMENT = 0.2
+
+    @staticmethod
+    def distance(x2, y2, x1, y1):
+        return math.sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2))
+
+    def print_ultrasonic_values(self):
+        print "---------------------------------------------------"
+        print "left = {0}".format(self.read_left_ultra_sonic())
+        print "mid = {0}".format(self.read_mid_ultra_sonic())
+        print "right = {0}".format(self.read_right_ultra_sonic())
+        print "---------------------------------------------------"
+
+    def update_odometry(self, r_dir=1, l_dir=1):
+        
+        right_pos = self.get_right_motor_coordinates()[0:2]
+        left_pos = self.get_left_motor_coordinates()[0:2]
+        old_right_pos = self.prev_right_pos
+        old_left_pos = self.prev_left_pos
+        d_right = r_dir * Robot.distance(right_pos[0], right_pos[1], old_right_pos[0], old_right_pos[1])
+        d_left = l_dir * Robot.distance(left_pos[0], left_pos[1], old_left_pos[0], old_left_pos[1])
+        self.prev_right_pos = right_pos
+        self.prev_left_pos = left_pos
+        d_center = (d_right + d_left) / 2
+        phi = (d_right - d_left) / Robot.WHEEL_L
+        x_dt = d_center * math.cos(self.theta)
+        y_dt = d_center * math.sin(self.theta)
+        theta_dt = phi
+        theta_new = self.theta + theta_dt
+        self.pos_x += x_dt
+        self.pos_y += y_dt
+        self.theta = math.atan2(math.sin(theta_new), math.cos(theta_new))
+
+    def go_to_angle(self, theta_d, tolerance=0.15, cc=True):
+        if abs(theta_d) > 90:
+            cc = False
+        if cc:
+            self.motor1(self.SPEED / 5)
+            self.motor2(self.SPEED / 5, False)
+        else:
+            self.motor1(self.SPEED / 5, False)
+            self.motor2(self.SPEED / 5)
+        while True:
+            e = theta_d - self.theta
+            e = math.atan2(math.sin(e), math.cos(e))
+            # print math.degrees(e)
+            if abs(e) < tolerance:
+                self.motor1(0)
+                self.motor2(0)
+                return
+            if cc:
+                self.update_odometry(r_dir=-1)
+            else:
+                self.update_odometry(l_dir=-1)
+
+    def go_to_point(self, x_g, y_g, tolerance=0.2):
+        u_x = x_g - self.pos_x
+        u_y = y_g - self.pos_y
+        if not (abs(u_x) < 0.01 or abs(u_y) < 0.01):
+            theta_g = math.atan2(u_y, u_x)
+            self.go_to_angle(theta_g)
+        self.motor1(self.SPEED)
+        self.motor2(self.SPEED)
+        while True:
+            # print Robot.distance(x_g, y_g, self.pos_x, self.pos_y)
+            if Robot.distance(x_g, y_g, self.pos_x, self.pos_y) < tolerance:
+                self.motor1(0)
+                self.motor2(0)
+                return
+            self.update_odometry()
+
+    def go_to_point2(self, x_g, y_g, tolerance=0.01, us_check=True):
+        u_x = x_g - self.pos_x
+        u_y = y_g - self.pos_y
+        if not (abs(u_x) < 0.01 or abs(u_y) < 0.01):
+            theta_g = math.atan2(u_y, u_x)
+            self.go_to_angle(theta_g)
+        u_mag = Robot.distance(u_x, u_y, 0, 0)
+        self.motor1(self.SPEED)
+        self.motor2(self.SPEED)
+        start_x = self.pos_x
+        start_y = self.pos_y
+        if us_check:
+            ref_left_us = self.read_left_ultra_sonic()
+            if ref_left_us[0]:
+                ref_left_us = ref_left_us[1]
+            else:
+                us_check = False
+        while True:
+            covered = Robot.distance(self.pos_x, self.pos_y, start_x, start_y)
+            # print "u_mag = ", u_mag, "covered = ", covered
+            if abs(u_mag - covered) < tolerance:
+                self.motor1(0)
+                self.motor2(0)
+                return
+            if us_check:
+                left_us = self.read_left_ultra_sonic()
+                right_us = self.read_right_ultra_sonic()
+                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
+                    self.motor1(self.SPEED - 1)
+                    self.motor2(self.SPEED)
+                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED - 1)
+                else:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED)
+            self.update_odometry()
 
     def setup(self):
         """
-        The analogus of setup() inside microcontoller.
+        The analogy of setup() inside micro-controller.
         """
-
-        self.state = Robot.STOPPED
+        if not self.read_mid_ultra_sonic()[0]:
+            self.robot_ID = 0
+        else:
+            self.robot_ID = 1  # replaced later by distributed hash table code
+        if self.robot_ID == 0:
+            self.state = Robot.SCAN
+        else:
+            self.state = Robot.FOLLOWER
 
     def loop(self):
         """
-        The analogus of loop() inside microcontoller,write your code inside
+        The analogy of loop() inside micro-controller,write your code inside
         """
-        cs_reading = self.read_color_sensor()
-        if self.state == Robot.STOPPED:
+        if self.state == Robot.STOP:
             self.motor1(0)
             self.motor2(0)
-            if self.grip():
-                self.state = Robot.RUNNING
-
             return
-        print("Let motor ticks {0} , right motor ticks {1}".format(
-            self.get_left_motor_ticks(), self.get_right_motor_ticks()))
-        if self.message_queue.qsize() > 0:
-            msg = self.message_queue.get()
-        self.motor1(13)
-        self.motor2(10)
+        elif self.state == Robot.EXIT:
+            self.go_to_point2(0, -0.3)
+            self.motor1(0)
+            self.motor2(0)
+            self.state = Robot.STOP
+            return
+        elif self.state == Robot.SCAN:
+            self.prev_right_pos = self.get_right_motor_coordinates()[0:2]
+            self.prev_left_pos = self.get_left_motor_coordinates()[0:2]
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            start_x = self.pos_x
+            start_y = self.pos_y
+            ref_left_us = self.read_left_ultra_sonic()[1]
+            while True:
+                left_us = self.read_left_ultra_sonic()
+                mid_us = self.read_mid_ultra_sonic()
+                right_us = self.read_right_ultra_sonic()
+                if left_us[0] and mid_us[0] and right_us[0] and mid_us[1] < 0.15:
+                    self.motor1(0)
+                    self.motor2(0)
+                    end_x = self.pos_x
+                    end_y = self.pos_y
+                    Robot.length_arena = Robot.distance(end_x, end_y, start_x, start_y)
+                    break
+                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
+                    self.motor1(self.SPEED-1)
+                    self.motor2(self.SPEED)
+                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED-1)
+                else:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED)
+                self.update_odometry()
+            theta_d = self.theta - math.pi / 2
+            theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+            self.go_to_angle(theta_d, tolerance=0.015)
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            start_x = self.pos_x
+            start_y = self.pos_y
+            ref_left_us = self.read_left_ultra_sonic()[1]
+            while True:
+                left_us = self.read_left_ultra_sonic()
+                mid_us = self.read_mid_ultra_sonic()
+                right_us = self.read_right_ultra_sonic()
+                if left_us[0] and mid_us[0] and right_us[0] and mid_us[1] < 0.15:
+                    self.motor1(0)
+                    self.motor2(0)
+                    end_x = self.pos_x
+                    end_y = self.pos_y
+                    Robot.width_arena = Robot.distance(end_x, end_y, start_x, start_y)
+                    break
+                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
+                    self.motor1(self.SPEED - 1)
+                    self.motor2(self.SPEED)
+                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED - 1)
+                else:
+                    self.motor1(self.SPEED)
+                    self.motor2(self.SPEED)
+                self.update_odometry()
+            theta_d = self.theta - math.pi / 2
+            theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+            self.go_to_angle(theta_d, tolerance=0.015)
+            self.state = Robot.FORAGE
+        elif self.state == Robot.FORAGE:
+            # Down motion
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            self.go_to_point2(self.pos_x, self.pos_y - Robot.length_arena)
 
-        detected, distance = self.read_mid_ultra_sonic()
-        if detected:
+            Robot.width_arena -= Robot.DISTANCE_DECREMENT
+            if Robot.width_arena <= 0:
+                self.motor1(0)
+                self.motor2(0)
+                self.theta = - math.pi / 2
+                self.state = Robot.EXIT
+                return
+            else:
+                theta_d = self.theta - math.pi / 2
+                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.go_to_angle(theta_d, tolerance=0.015)
 
-            self.state = Robot.STOPPED
-            status = ("Robot {0} detected element on distance  : {1}".format(
-                self.name, distance))
-            vrep.simxAddStatusbarMessage(
-                self.clientID, status, vrep.simx_opmode_blocking)
+            # Left motion
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            self.go_to_point2(self.pos_x - Robot.width_arena, self.pos_y, us_check=False)
+
+            Robot.length_arena -= Robot.DISTANCE_DECREMENT
+            if Robot.length_arena <= 0:
+                self.motor1(0)
+                self.motor2(0)
+                self.theta = math.pi
+                self.state = Robot.EXIT
+                return
+            else:
+                theta_d = self.theta - math.pi / 2
+                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.go_to_angle(theta_d, tolerance=0.015)
+
+            # Up motion
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            self.go_to_point2(self.pos_x, self.pos_y + Robot.length_arena)
+
+            Robot.width_arena -= Robot.DISTANCE_DECREMENT
+            if Robot.width_arena <= 0:
+                self.motor1(0)
+                self.motor2(0)
+                self.theta = math.pi / 2
+                self.state = Robot.EXIT
+                return
+            else:
+                theta_d = self.theta - math.pi / 2
+                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.go_to_angle(theta_d, tolerance=0.015)
+
+            # Right motion
+            self.motor1(self.SPEED)
+            self.motor2(self.SPEED)
+            self.go_to_point2(self.pos_x + Robot.width_arena, self.pos_y)
+
+            Robot.length_arena -= Robot.DISTANCE_DECREMENT
+            if Robot.length_arena <= 0:
+                self.motor1(0)
+                self.motor2(0)
+                self.theta = 0
+                self.state = Robot.EXIT
+                return
+            else:
+                theta_d = self.theta - math.pi / 2
+                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.go_to_angle(theta_d, tolerance=0.015)
 
     def __init__(self, name, sim):
         threading.Thread.__init__(self)
@@ -53,11 +304,20 @@ class Robot(threading.Thread):
         self.run_event = self.sim.run_event
         self.clientID = self.sim.clientID
         self.name = name
+        self.state = Robot.STOP
+        self.SPEED = 20
+        self.robot_ID = 0
+        self.pos_x = 0
+        self.pos_y = 0
+        self.theta = math.pi / 2
+        self.prev_right_ticks = 0
+        self.prev_left_ticks = 0
+        self.prev_right_pos = None
+        self.prev_left_pos = None
 
         # Setup the postfix of the robot name
         self.postfix = ""
         try:
-
             i = self.name.index("DragonOne") + len("DragonOne")
             self.postfix = self.name[i:]
         except:
@@ -96,7 +356,7 @@ class Robot(threading.Thread):
 
         self.__right_motor_ticks = 0
         self.__right_motor_old_position = 0  # This is used to calculate ticks
-
+        
         # Gripper handlers
         self.GripperProxSensor = vrep.simxGetObjectHandle(
             self.clientID, "RG2_attachProxSensor{0}".format(self.postfix),
@@ -105,13 +365,13 @@ class Robot(threading.Thread):
             self.clientID, "RG2_attachPoint{0}".format(self.postfix),
             vrep.simx_opmode_blocking)[1]
         self.__GrippedShape = None
+        
         self.setup()
 
     def run(self):
         while self.run_event.is_set():
             self.__calculate_ticks()
             self.loop()
-
             # Sleep so other threads can be scheduled
             time.sleep(0.1)
 
@@ -240,14 +500,14 @@ class Robot(threading.Thread):
             self.clientID, sensor_handle, vrep.simx_opmode_blocking)[1:3]
         if state == 1:
             distance = math.sqrt(
-                detected_point[0]**2 + detected_point[1]**2 + detected_point[2]**2)
+                detected_point[0] ** 2 + detected_point[1] ** 2 + detected_point[2] ** 2)
             return (True, distance)
         return (False, None)
 
     def read_color_sensor(self):
         """
         This function returns a list of 4 values: light intensity, red, green, blue averges across the pixels of the detector in case of success,
-        these values range from 0-255. Or it returns None in case of failures
+        these values range from 0-255. Or it returns None in case of faliures
         """
         if hasattr(self, "__first_color_sensor_read") == False:
             self.__first_color_sensor_read = True
