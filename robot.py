@@ -63,19 +63,43 @@ class Robot(threading.Thread):
         self.pos_y += y_dt
         self.theta = math.atan2(math.sin(theta_new), math.cos(theta_new))
 
-    def go_to_angle(self, theta_d, tolerance=0.15, cc=True):
+    def go_to_angle(self, theta_d, tolerance=0.01, cc=True):
+        print "Target theta is %s" % theta_d
         if abs(theta_d) > 90:
             cc = False
-        if cc:
-            self.motor1(self.SPEED / 5)
-            self.motor2(self.SPEED / 5, False)
-        else:
-            self.motor1(self.SPEED / 5, False)
-            self.motor2(self.SPEED / 5)
+
+        u = self.SPEED /5
+        self.motor1(u,cc)
+        self.motor2(u,not cc)
+        Kp = 5
+        Ki = 0.3
+        Kd = 0.1
+
+        e_1 = 0
+        e_acc = 0
+        previous_time = time.time()-1
         while True:
             e = theta_d - self.theta
             e = math.atan2(math.sin(e), math.cos(e))
-            # print math.degrees(e)
+
+            # Calculate dt
+            c_time = time.time()
+            dt = c_time - previous_time
+            if(dt == 0):
+                continue
+            u = Kp*e + Ki * (e_acc+e*dt) + Kd * (e-e_1)/dt
+            u = int(round(u))
+            
+            cc = u < 0
+            u = abs(u)
+            
+            print "Error in degrees %s and U = %s , CC = %s" % (math.degrees(e),u,cc)
+
+            e_1 = e
+            e_acc += e*dt
+            previous_time=c_time
+            self.motor1(u,cc)
+            self.motor2(u,not cc)
             if abs(e) < tolerance:
                 self.motor1(0)
                 self.motor2(0)
