@@ -366,6 +366,15 @@ class Robot(threading.Thread):
             vrep.simx_opmode_blocking)[1]
         self.__GrippedShape = None
         
+
+        # Request streaming values
+        vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_streaming)
+        vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_streaming)
+
+        vrep.simxReadProximitySensor(self.clientID,self.left_ultrasonic,vrep.simx_opmode_streaming)
+        vrep.simxReadProximitySensor(self.clientID,self.mid_ultrasonic,vrep.simx_opmode_streaming)
+        vrep.simxReadProximitySensor(self.clientID,self.right_ultrasonic,vrep.simx_opmode_streaming)
+
         self.setup()
 
     def run(self):
@@ -397,13 +406,16 @@ class Robot(threading.Thread):
         """
         return a tuple contating the coordinates (x,y,z) for the left motor joint in meters
         """
-        return vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_blocking)[1]
+        
+        return vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_buffer)[1]
 
     def get_right_motor_coordinates(self):
         """
         return a tuple contating the coordinates (x,y,z) for the right motor joint in meters
         """
-        return vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_blocking)[1]
+       
+        return vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_buffer)[1]
+        
 
     def get_left_motor_ticks(self):
         return self.__left_motor_ticks
@@ -484,7 +496,7 @@ class Robot(threading.Thread):
             value = -value
         vrep.simxSetJointTargetVelocity(
             self.clientID, motor_handle, value * .1,
-            vrep.simx_opmode_blocking)
+            vrep.simx_opmode_oneshot)
 
     def read_left_ultra_sonic(self):
         return self.__read_ultrasonic(self.left_ultrasonic)
@@ -497,7 +509,7 @@ class Robot(threading.Thread):
 
     def __read_ultrasonic(self, sensor_handle):
         state, detected_point = vrep.simxReadProximitySensor(
-            self.clientID, sensor_handle, vrep.simx_opmode_blocking)[1:3]
+            self.clientID, sensor_handle, vrep.simx_opmode_buffer)[1:3]
         if state == 1:
             distance = math.sqrt(
                 detected_point[0] ** 2 + detected_point[1] ** 2 + detected_point[2] ** 2)
