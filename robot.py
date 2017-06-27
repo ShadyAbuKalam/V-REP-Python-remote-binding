@@ -8,6 +8,7 @@ from Queue import Queue
 class Robot(threading.Thread):
 
 
+    MAX_VELOCITY = 15
     # States
     SCAN = 0
     FORAGE = 1
@@ -109,15 +110,46 @@ class Robot(threading.Thread):
             else:
                 self.update_odometry(l_dir=-1)
 
-    def go_to_point(self, x_g, y_g, tolerance=0.2):
+    def go_to_point(self, x_g, y_g, tolerance=0.01):
+        angular_Kp = 1
+        angular_Ki = 0.1
+        angular_Kd = 0.1
+        e_1 = 0
+        e_acc = 0
+        previous_time = time.time()-1
+
+
         u_x = x_g - self.pos_x
         u_y = y_g - self.pos_y
+        theta_d = math.atan2(u_y, u_x)
+
         if not (abs(u_x) < 0.01 or abs(u_y) < 0.01):
-            theta_g = math.atan2(u_y, u_x)
-            self.go_to_angle(theta_g)
-        self.motor1(self.SPEED)
-        self.motor2(self.SPEED)
+            self.go_to_angle(theta_d)
+
         while True:
+            e = theta_d - self.theta
+            e = math.atan2(math.sin(e), math.cos(e))
+
+            # Calculate dt
+            c_time = time.time()
+            dt = c_time - previous_time
+            if(dt == 0):
+                continue
+            u = angular_Kp*e + angular_Ki * (e_acc+e*dt) + angular_Kd * (e-e_1)/dt
+            u = int(round(u))
+            vLeft = 13 - u 
+            vRight = 13 + u
+            #Find the max and min of vLeft/vRight
+            velMax = max(vLeft, vRight)
+            velMin = min(vLeft, vRight)
+            if (velMax > Robot.MAX_VELOCITY):
+                vLeft -= (velMax - Robot.MAX_VELOCITY)
+                vRight -= (velMax - Robot.MAX_VELOCITY)
+            elif (velMin < -Robot.MAX_VELOCITY):
+                vLeft -= (velMin + Robot.MAX_VELOCITY)
+                vRight -= (velMin + Robot.MAX_VELOCITY)
+            self.motor1(vLeft)
+            self.motor2(vRight)
             # print Robot.distance(x_g, y_g, self.pos_x, self.pos_y)
             if Robot.distance(x_g, y_g, self.pos_x, self.pos_y) < tolerance:
                 self.motor1(0)
