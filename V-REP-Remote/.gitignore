@@ -1,0 +1,7 @@
+__pycache__/
+*.swp
+
+vrep.py
+vrepConst.py
+remoteApi.so
+remoteApi.dll
