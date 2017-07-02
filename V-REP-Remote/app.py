@@ -71,9 +71,11 @@ class Simulator():
 
             print("Found {0} robots".format(len(self.robots)))
             # Start robot threads
-            vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_blocking)
             for r in self.robots:
                 r.start()
+
+            vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_blocking)
+
 
         else:
             print('Failed connecting to remote API server')
