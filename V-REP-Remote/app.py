@@ -56,8 +56,7 @@ class Simulator():
         if self.clientID != -1:
             print('Connected to remote API server')
             vrep.simxStopSimulation(self.clientID, vrep.simx_opmode_blocking)
-            # Set run Event
-            self.run_event.set()
+           
             # Now try to retrieve robot identifers in a blocking fashion (i.e. a service call):
             # We know that each robot name has the following
             returnCode, handles, intData, floatData, stringData = vrep.simxGetObjectGroupData(
@@ -70,11 +69,18 @@ class Simulator():
                     self.robots.append(r)
 
             print("Found {0} robots".format(len(self.robots)))
-            # Start robot threads
+            
+            vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_blocking)
+
+            # Setup robot threads
+            for r in self.robots:
+                r.setup()
+
+            # Set run Event and start the robot threads
+            self.run_event.set()
             for r in self.robots:
                 r.start()
-
-            vrep.simxStartSimulation(self.clientID, vrep.simx_opmode_blocking)
+            
 
 
         else:
