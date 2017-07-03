@@ -1,9 +1,9 @@
+import utils
 import vrep
 import threading
 import time
 import math
 from Queue import Queue
-
 
 class Robot(threading.Thread):
 
@@ -13,7 +13,7 @@ class Robot(threading.Thread):
     BLUE = 2
     BLACK = 3
 
-    MAX_VELOCITY = 15
+    MAX_VELOCITY = 25
     #Gripper state
     EMPTY = 0
     LIGHT = 1
@@ -57,7 +57,7 @@ class Robot(threading.Thread):
         print "---------------------------------------------------"
 
     def update_odometry(self, r_dir=1, l_dir=1):
-        print("X = {0}, Y = {1}, Theta = {2}".format(self.pos_x,self.pos_y,self.theta))
+        # print("X = {0}, Y = {1}, Theta = {2}".format(self.pos_x,self.pos_y,self.theta))
 
         right_pos = self.get_right_motor_coordinates()
         left_pos = self.get_left_motor_coordinates()
@@ -67,13 +67,13 @@ class Robot(threading.Thread):
             x_shift = (self.prev_left_pos[0]+self.prev_right_pos[0] )/2
             y_shift = (self.prev_left_pos[1]+self.prev_right_pos[1] )/2
 
-            self.pos_x = (left_pos[0]+right_pos[0])/2-x_shift
-            self.pos_y = (left_pos[1]+right_pos[1]) / 2-y_shift
+            self.pos_x = (left_pos[0]+right_pos[0])/2 - x_shift
+            self.pos_y = (left_pos[1]+right_pos[1])/2 - y_shift
+
 
             diff = [r - l for r,l in zip(right_pos,left_pos)]
             theta_new = math.atan2(diff[1],diff[0]) + math.pi/2
 
-            self.pos_x 
         else:
 
             old_right_pos = self.prev_right_pos
@@ -96,6 +96,9 @@ class Robot(threading.Thread):
 
 
     def go_to_angle(self, theta_d, tolerance=0.015, cc=True):
+
+        if( abs(theta_d - self.theta) < tolerance):
+            return
         print "Target theta is %s" % theta_d
 
 
@@ -137,7 +140,9 @@ class Robot(threading.Thread):
             else:
                 self.update_odometry(l_dir=-1)
 
-    def go_to_point(self, x_g, y_g, tolerance=0.075):
+    def go_to_point(self, x_g, y_g, tolerance=0.075,base_velocity=None):
+        if(base_velocity is None):
+            base_velocity = self.SPEED
         angular_Kp = 10
         angular_Ki = 0.3
         angular_Kd = 0.1
@@ -160,7 +165,7 @@ class Robot(threading.Thread):
                 if(mid_us[0] and mid_us[1] <= 0.1):
                     self.state= Robot.OBSTACLE_HANDLING
                     return False
-
+                
                     
                     
                 
@@ -173,9 +178,11 @@ class Robot(threading.Thread):
             if(dt == 0):
                 continue
             u = angular_Kp*e + angular_Ki * (e_acc+e*dt) + angular_Kd * (e-e_1)/dt
+            if ( math.isnan(u)):
+                pass
             u = int(round(u))
-            vLeft = 13 - u 
-            vRight = 13 + u
+            vLeft = base_velocity - u 
+            vRight = base_velocity + u
             #Find the max and min of vLeft/vRight
             velMax = max(vLeft, vRight)
             velMin = min(vLeft, vRight)
@@ -235,21 +242,25 @@ class Robot(threading.Thread):
     def setup(self):
         """
         The analogy of setup() inside micro-controller.
+        It must be called after the start of simulation from the app.py
         """
         self.gripper_state = Robot.EMPTY
-        if not self.read_mid_ultra_sonic()[0]:
+        if not self.postfix: # Must find  a way to replace resolve this issue
             self.robot_ID = 0
         else:
             self.robot_ID = 1  # replaced later by distributed hash table code
         if self.robot_ID == 0:
             self.state = Robot.SCAN
+            print("A robot is a Head")
+
         else:
             self.state = Robot.FOLLOWER
+            print("A robot is a follower")
 
-        while(self.prev_right_pos == None):
-           self.prev_right_pos = self.get_right_motor_coordinates()
-        while(self.prev_left_pos == None):
-            self.prev_left_pos = self.get_left_motor_coordinates()
+        self.motor1(0) # As the simulator sometimes save the old velocity from the last simulation
+        self.motor2(0)
+        self.prev_right_pos = self.get_right_motor_coordinates()
+        self.prev_left_pos = self.get_left_motor_coordinates()
 
     def loop(self):
         """
@@ -447,8 +458,54 @@ class Robot(threading.Thread):
             else:
                 self.state = Robot.STOP
 
+        elif self.state == Robot.FOLLOWER:
+            isObj_m,Dist_m=self.read_mid_ultra_sonic()
+            isObj_l,Dist_l=self.read_left_ultra_sonic()
+            isObj_r,Dist_r=self.read_right_ultra_sonic()
+            if ((Dist_m is not None) and  (Dist_r is None)):##straight Motion :
 
+                if(Dist_m>=0.29):
+                    print("Accelrating")
+                    L = 0.2
+                    theta = utils.limitToOneOfPoles(self.theta)
+                    y = L*math.sin(theta)+self.pos_y
+                    
+                    x = L*math.cos(theta)+self.pos_x
+                    
+                    self.go_to_point(x,y,base_velocity=self.SPEED*1.5)
+                    
+                elif(Dist_m<0.29 and Dist_m>0.2):
+                    print "Following"
+                    theta = utils.limitToOneOfPoles(self.theta)
+
+                    L = 0.1
+                    y = L*math.sin(theta)+self.pos_y
+                    x = L*math.cos(theta)+self.pos_x
+                    self.go_to_point(x,y)
+                    
+                elif(Dist_m<=0.2):
+                    print("Stopping")
+                    self.motor1(0,True)
+                    self.motor2(0,True)
             
+            elif(Dist_m is None and Dist_r is not None):
+                print "Follower turning right"
+                #front Robot turned right : here the right ultrasonuc reads only whick makes the follower robot must turns right bs after some times 
+                L = Dist_r+0.1
+                theta = utils.limitToOneOfPoles(self.theta)
+                y = L*math.sin(theta)+self.pos_y
+                x = L*math.cos(theta)+self.pos_x
+                print(y-self.pos_y)
+                print(x-self.pos_x)
+
+                self.go_to_point(x,y,tolerance=0.01)
+                self.go_to_angle(self.theta-math.pi/2)
+            elif Dist_m is None:
+                self.motor1(self.SPEED*2)
+                self.motor2(self.SPEED*2)
+
+
+        self.update_odometry()
     def __init__(self, name, sim):
         threading.Thread.__init__(self)
         self.message_queue = Queue()  # Queue for received messages
@@ -527,7 +584,6 @@ class Robot(threading.Thread):
         vrep.simxReadProximitySensor(self.clientID,self.mid_ultrasonic,vrep.simx_opmode_streaming)
         vrep.simxReadProximitySensor(self.clientID,self.right_ultrasonic,vrep.simx_opmode_streaming)
 
-        self.setup()
 
     def run(self):
         while self.run_event.is_set():
@@ -560,6 +616,9 @@ class Robot(threading.Thread):
         """
         
         return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_buffer)
+        while (return_code == vrep.simx_return_novalue_flag):
+            return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_buffer)
+
         if (return_code == vrep.simx_return_ok):
             return pos[0:2]
         return None
@@ -569,6 +628,9 @@ class Robot(threading.Thread):
         """
        
         return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_buffer)
+        while (return_code == vrep.simx_return_novalue_flag):
+            return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_buffer)
+
         if (return_code == vrep.simx_return_ok):
             return pos[0:2]
         return None
@@ -666,6 +728,9 @@ class Robot(threading.Thread):
 
     def __read_ultrasonic(self, sensor_handle):
         return_code,state, detected_point = vrep.simxReadProximitySensor(
+            self.clientID, sensor_handle, vrep.simx_opmode_buffer)[0:3]
+        while return_code == vrep.simx_return_novalue_flag:
+            return_code,state, detected_point = vrep.simxReadProximitySensor(
             self.clientID, sensor_handle, vrep.simx_opmode_buffer)[0:3]
         if state == 1:
             distance = math.sqrt(
