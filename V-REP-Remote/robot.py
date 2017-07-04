@@ -7,6 +7,9 @@ from Queue import Queue
 
 class Robot(threading.Thread):
 
+    #Message types
+    ROTATION_MESSAGE = 0
+
     #Color
     RED = 0
     GREEN = 1
@@ -242,6 +245,8 @@ class Robot(threading.Thread):
         The analogy of setup() inside micro-controller.
         It must be called after the start of simulation from the app.py
         """
+        self.isHead = False
+
         self.gripper_state = Robot.EMPTY
         if not self.postfix: # Must find  a way to replace resolve this issue
             self.robot_ID = 0
@@ -249,17 +254,26 @@ class Robot(threading.Thread):
             self.robot_ID = 1  # replaced later by distributed hash table code
         if self.robot_ID == 0:
             self.state = Robot.SCAN
+            self.isHead = True
             print("A robot is a Head")
 
         else:
             self.state = Robot.FOLLOWER
+            self.isHead = False
             print("A robot is a follower")
 
-        self.motor1(0) # As the simulator sometimes save the old velocity from the last simulation
+        # Follower algorithm state 
+        self.next_follower_rotation = []
+
+        #Reset old values for speed saved in simulator from the last simulation pass
+        self.motor1(0)
         self.motor2(0)
+
+        #Initialize these two important variables :D 
         self.prev_right_pos = self.get_right_motor_coordinates()
         self.prev_left_pos = self.get_left_motor_coordinates()
 
+        
     def loop(self):
         """
         The analogy of loop() inside micro-controller,write your code inside
@@ -307,6 +321,7 @@ class Robot(threading.Thread):
                 self.update_odometry()
             theta_d = self.theta - math.pi / 2
             theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+            self.send_rotation_message()
             self.go_to_angle(theta_d, tolerance=0.015)
             self.motor1(self.SPEED)
             self.motor2(self.SPEED)
@@ -336,6 +351,8 @@ class Robot(threading.Thread):
                 self.update_odometry()
             theta_d = self.theta - math.pi / 2
             theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+            self.send_rotation_message()
+
             self.go_to_angle(theta_d, tolerance=0.01)
             self.state = Robot.FORAGE
         elif self.state == Robot.FORAGE:
@@ -355,6 +372,7 @@ class Robot(threading.Thread):
             else:
                 theta_d = self.theta - math.pi / 2
                 theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.send_rotation_message()
                 self.go_to_angle(theta_d, tolerance=0.015)
 
             # Left motion
@@ -373,6 +391,7 @@ class Robot(threading.Thread):
             else:
                 theta_d = self.theta - math.pi / 2
                 theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.send_rotation_message()
                 self.go_to_angle(theta_d, tolerance=0.015)
 
             # Up motion
@@ -391,6 +410,8 @@ class Robot(threading.Thread):
             else:
                 theta_d = self.theta - math.pi / 2
                 theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.send_rotation_message()
+
                 self.go_to_angle(theta_d, tolerance=0.015)
 
             # Right motion
@@ -409,6 +430,8 @@ class Robot(threading.Thread):
             else:
                 theta_d = self.theta - math.pi / 2
                 theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.send_rotation_message()
+
                 self.go_to_angle(theta_d, tolerance=0.015)
     
         elif self.state == Robot.GRIPPING:
@@ -460,20 +483,29 @@ class Robot(threading.Thread):
             isObj_m,Dist_m=self.read_mid_ultra_sonic()
             isObj_l,Dist_l=self.read_left_ultra_sonic()
             isObj_r,Dist_r=self.read_right_ultra_sonic()
-            if ((Dist_m is not None) and  (Dist_r is None)):##straight Motion :
+            if(len(self.next_follower_rotation) > 0 and Robot.distance(self.pos_x,self.pos_y,self.next_follower_rotation[0]['x'],self.next_follower_rotation[0]['y']) <0.25):
+                print "Robot will rotate according to message"
+                self.motor1(0)
+                self.motor2(0)
+                coord= self.next_follower_rotation.pop(0)
+                print "Coord",coord,self.pos_x,self.pos_y
+                self.go_to_point(coord['x'],coord['y'],tolerance=0.01)
+                print "Follower is rotating"
+                theta = utils.limitToOneOfPoles(self.theta)
+
+                self.go_to_angle(theta-math.pi/2)
+            elif ((Dist_m is not None) and  (Dist_r is None)):##straight Motion :
 
                 if(Dist_m>=0.29):
-                    print("Accelrating")
                     L = 0.2
                     theta = utils.limitToOneOfPoles(self.theta)
                     y = L*math.sin(theta)+self.pos_y
                     
                     x = L*math.cos(theta)+self.pos_x
                     
-                    self.go_to_point(x,y,base_velocity=self.SPEED*1.5)
+                    self.go_to_point(x,y,base_velocity=self.SPEED*2)
                     
                 elif(Dist_m<0.29 and Dist_m>0.2):
-                    print "Following"
                     theta = utils.limitToOneOfPoles(self.theta)
 
                     L = 0.1
@@ -482,22 +514,10 @@ class Robot(threading.Thread):
                     self.go_to_point(x,y)
                     
                 elif(Dist_m<=0.2):
-                    print("Stopping")
                     self.motor1(0,True)
                     self.motor2(0,True)
             
-            elif(Dist_m is None and Dist_r is not None):
-                print "Follower turning right"
-                #front Robot turned right : here the right ultrasonuc reads only whick makes the follower robot must turns right bs after some times 
-                L = Dist_r+0.1
-                theta = utils.limitToOneOfPoles(self.theta)
-                y = L*math.sin(theta)+self.pos_y
-                x = L*math.cos(theta)+self.pos_x
-                print(y-self.pos_y)
-                print(x-self.pos_x)
 
-                self.go_to_point(x,y,tolerance=0.01)
-                self.go_to_angle(self.theta-math.pi/2)
             elif Dist_m is None:
                 self.motor1(self.SPEED*2)
                 self.motor2(self.SPEED*2)
@@ -589,6 +609,7 @@ class Robot(threading.Thread):
     def run(self):
         while self.run_event.is_set():
             # self.__calculate_ticks()
+            self.process_messages()
             self.loop()
             # Sleep so other threads can be scheduled
             time.sleep(0.1)
@@ -803,6 +824,19 @@ class Robot(threading.Thread):
             self.clientID, self.__GrippedShape, -1, True, vrep.simx_opmode_blocking)
         self.__GrippedShape = None
 
+    def send_rotation_message(self):
+        if(self.isHead):
+            message = {'type':Robot.ROTATION_MESSAGE,'data':{'x':self.pos_x,'y':self.pos_y}}
+            self.broadcast(message)
+
+    def process_messages(self):
+        while (not self.message_queue.empty()):
+            try:
+                message = self.message_queue.get_nowait()
+            except Queue.Empty:
+                return
+            if (message['type'] == Robot.ROTATION_MESSAGE):
+                self.next_follower_rotation.append(message['data'])
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
 
