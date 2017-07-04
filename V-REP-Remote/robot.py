@@ -103,25 +103,28 @@ class Robot(threading.Thread):
         print "Target theta is %s" % theta_d
 
 
-        Kp = 5
-        Ki = 0.3
+
+        Kp = 10
+        Ki = 0.8
         Kd = 0.5
 
         e_1 = 0
         e_acc = 0
         previous_time = time.time()-1
         while True:
+            
             e = theta_d - self.theta
             e = math.atan2(math.sin(e), math.cos(e))
 
             # Calculate dt
             c_time = time.time()
             dt = c_time - previous_time
-            if(dt == 0):
+            if(dt <= 0.001):
                 continue
             u = Kp*e + Ki * (e_acc+e*dt) + Kd * (e-e_1)/dt
-            u = int(round(u))
-            
+            # u = int(round(u))
+            # if(self.postfix):
+            #     print "Inside go to angle loop with u =",u
             cc = u < 0
             u = abs(u)
             
@@ -130,6 +133,8 @@ class Robot(threading.Thread):
             e_1 = e
             e_acc += e*dt
             previous_time=c_time
+            if(abs(u)>255):
+                u = 255 # Sometimes for unknown reasons u get values in order of thousands, so it's an odd ball solution
             self.motor1(u,cc)
             self.motor2(u,not cc)
             if abs(e) < tolerance:
