@@ -16,7 +16,7 @@ class Robot(threading.Thread):
     BLUE = 2
     BLACK = 3
 
-    MAX_VELOCITY = 25
+    MAX_VELOCITY = 100
     #Gripper state
     EMPTY = 0
     LIGHT = 1
