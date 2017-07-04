@@ -7,6 +7,11 @@ from Queue import Queue
 
 class Robot(threading.Thread):
 
+    #Directions
+    UP = 0
+    DOWN = 1
+    LEFT = 2
+    RIGHT = 3
     #Message types
     ROTATION_MESSAGE = 0
 
@@ -256,6 +261,9 @@ class Robot(threading.Thread):
         """
         self.isHead = False
 
+        # Foraging variables
+        self.foragin_motion = None
+
         self.gripper_state = Robot.EMPTY
         if not self.postfix: # Must find  a way to replace resolve this issue
             self.robot_ID = 0
@@ -292,7 +300,7 @@ class Robot(threading.Thread):
             self.motor2(0)
             return
         elif self.state == Robot.EXIT:
-            self.go_to_point(0, -0.3)
+            # self.go_to_point(0, -0.3)
             self.motor1(0)
             self.motor2(0)
             self.state = Robot.STOP
@@ -364,15 +372,35 @@ class Robot(threading.Thread):
 
             self.go_to_angle(theta_d, tolerance=0.01)
             self.state = Robot.FORAGE
+            self.foragin_motion = Robot.DOWN
         elif self.state == Robot.FORAGE:
-            # Down motion
+            #Generic
             self.motor1(self.SPEED)
             self.motor2(self.SPEED)
-            if (not self.go_to_point(self.pos_x, self.pos_y - Robot.length_arena)):
-                return
+            if (self.foragin_motion == Robot.DOWN ):
+                if (not self.go_to_point(self.pos_x, self.pos_y - Robot.length_arena)):
+                    return
+            elif self.foragin_motion == Robot.UP:
+                if (not self.go_to_point(self.pos_x, self.pos_y + Robot.length_arena)):
+                    return
 
-            Robot.width_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.width_arena <= Robot.FORAGING_STOP_DISTANCE:
+            elif self.foragin_motion == Robot.LEFT:
+                if (not self.go_to_point(self.pos_x - Robot.width_arena, self.pos_y)):
+                    return
+            elif self.foragin_motion == Robot.RIGHT:
+                if (not self.go_to_point(self.pos_x + Robot.width_arena, self.pos_y)):
+                    return
+            stop = False
+            if(self.foragin_motion == Robot.DOWN or self.foragin_motion == Robot.UP):
+
+                Robot.width_arena -= Robot.DISTANCE_DECREMENT
+                stop = Robot.width_arena <= Robot.FORAGING_STOP_DISTANCE
+
+
+            elif self.foragin_motion == Robot.LEFT or self.foragin_motion == Robot.RIGHT:
+                Robot.length_arena -= Robot.DISTANCE_DECREMENT
+                stop= Robot.length_arena <= Robot.FORAGING_STOP_DISTANCE
+            if stop:
                 self.motor1(0)
                 self.motor2(0)
                 self.theta = - math.pi / 2
@@ -384,64 +412,15 @@ class Robot(threading.Thread):
                 self.send_rotation_message()
                 self.go_to_angle(theta_d, tolerance=0.015)
 
-            # Left motion
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            if(not self.go_to_point(self.pos_x - Robot.width_arena, self.pos_y)):
-                return
-
-            Robot.length_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.length_arena <= Robot.FORAGING_STOP_DISTANCE:
-                self.motor1(0)
-                self.motor2(0)
-                self.theta = math.pi
-                self.state = Robot.EXIT
-                return
-            else:
-                theta_d = self.theta - math.pi / 2
-                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
-                self.send_rotation_message()
-                self.go_to_angle(theta_d, tolerance=0.015)
-
-            # Up motion
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            if(not self.go_to_point(self.pos_x, self.pos_y + Robot.length_arena)):
-                return
-
-            Robot.width_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.width_arena <=  Robot.FORAGING_STOP_DISTANCE:
-                self.motor1(0)
-                self.motor2(0)
-                self.theta = math.pi / 2
-                self.state = Robot.EXIT
-                return
-            else:
-                theta_d = self.theta - math.pi / 2
-                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
-                self.send_rotation_message()
-
-                self.go_to_angle(theta_d, tolerance=0.015)
-
-            # Right motion
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            if(not self.go_to_point(self.pos_x + Robot.width_arena, self.pos_y)):
-                return
-
-            Robot.length_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.length_arena <=  Robot.FORAGING_STOP_DISTANCE:
-                self.motor1(0)
-                self.motor2(0)
-                self.theta = 0
-                self.state = Robot.EXIT
-                return
-            else:
-                theta_d = self.theta - math.pi / 2
-                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
-                self.send_rotation_message()
-
-                self.go_to_angle(theta_d, tolerance=0.015)
+            #Update foraging motion to reflect the next direction
+            if self.foragin_motion == self.DOWN:
+                self.foragin_motion = self.LEFT
+            elif self.foragin_motion == self.LEFT:
+                self.foragin_motion = self.UP
+            elif self.foragin_motion == self.UP:
+                self.foragin_motion = self.RIGHT
+            elif self.foragin_motion == self.RIGHT:
+                self.foragin_motion = self.DOWN
     
         elif self.state == Robot.GRIPPING:
             
