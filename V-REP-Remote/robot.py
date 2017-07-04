@@ -47,6 +47,7 @@ class Robot(threading.Thread):
     width_arena = 0
 
     DISTANCE_DECREMENT = 0.2
+    FORAGING_STOP_DISTANCE = 0.3
 
     @staticmethod
     def distance(x2, y2, x1, y1):
@@ -371,7 +372,7 @@ class Robot(threading.Thread):
                 return
 
             Robot.width_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.width_arena <= 0:
+            if Robot.width_arena <= Robot.FORAGING_STOP_DISTANCE:
                 self.motor1(0)
                 self.motor2(0)
                 self.theta = - math.pi / 2
@@ -390,7 +391,7 @@ class Robot(threading.Thread):
                 return
 
             Robot.length_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.length_arena <= 0:
+            if Robot.length_arena <= Robot.FORAGING_STOP_DISTANCE:
                 self.motor1(0)
                 self.motor2(0)
                 self.theta = math.pi
@@ -409,7 +410,7 @@ class Robot(threading.Thread):
                 return
 
             Robot.width_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.width_arena <= 0:
+            if Robot.width_arena <=  Robot.FORAGING_STOP_DISTANCE:
                 self.motor1(0)
                 self.motor2(0)
                 self.theta = math.pi / 2
@@ -429,7 +430,7 @@ class Robot(threading.Thread):
                 return
 
             Robot.length_arena -= Robot.DISTANCE_DECREMENT
-            if Robot.length_arena <= 0:
+            if Robot.length_arena <=  Robot.FORAGING_STOP_DISTANCE:
                 self.motor1(0)
                 self.motor2(0)
                 self.theta = 0
