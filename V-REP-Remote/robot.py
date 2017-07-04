@@ -14,7 +14,7 @@ class Robot(threading.Thread):
     RIGHT = 3
     #Message types
     ROTATION_MESSAGE = 0
-
+    END_OF_ARENA_MESSAGE = 1
     #Color
     RED = 0
     GREEN = 1
@@ -405,6 +405,7 @@ class Robot(threading.Thread):
                 self.motor2(0)
                 self.theta = - math.pi / 2
                 self.state = Robot.EXIT
+                self.send_end_of_arena_message()
                 return
             else:
                 theta_d = self.theta - math.pi / 2
@@ -438,7 +439,7 @@ class Robot(threading.Thread):
                 self.state = Robot.DEPOSITING
             else :
                 self.gripper_state = None
-                assert(False)  # It failed to grip 
+                assert(False)  # It failed to grip
                 
         elif self.state == Robot.DEPOSITING:
             if self.gripper_state == Robot.LIGHT:
@@ -817,6 +818,14 @@ class Robot(threading.Thread):
             message = {'type':Robot.ROTATION_MESSAGE,'data':{'x':self.pos_x,'y':self.pos_y}}
             self.broadcast(message)
 
+    def send_end_of_arena_message(self):
+        """
+        Tell other robots that we are done
+        """
+        if (self.isHead):
+            message = {'type': Robot.END_OF_ARENA_MESSAGE, 'data': None}
+            self.broadcast(message)
+
     def process_messages(self):
         while (not self.message_queue.empty()):
             try:
@@ -825,6 +834,8 @@ class Robot(threading.Thread):
                 return
             if (message['type'] == Robot.ROTATION_MESSAGE):
                 self.next_follower_rotation.append(message['data'])
+            elif (message['type'] == Robot.END_OF_ARENA_MESSAGE):
+                self.state = Robot.STOP
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
 
