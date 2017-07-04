@@ -64,11 +64,9 @@ class Robot(threading.Thread):
         
 
         if True:
-            x_shift = (self.prev_left_pos[0]+self.prev_right_pos[0] )/2
-            y_shift = (self.prev_left_pos[1]+self.prev_right_pos[1] )/2
 
-            self.pos_x = (left_pos[0]+right_pos[0])/2 - x_shift
-            self.pos_y = (left_pos[1]+right_pos[1])/2 - y_shift
+            self.pos_x = (left_pos[0]+right_pos[0])/2 
+            self.pos_y = (left_pos[1]+right_pos[1])/2 
 
 
             diff = [r - l for r,l in zip(right_pos,left_pos)]
@@ -532,6 +530,9 @@ class Robot(threading.Thread):
         except:
             pass
 
+        self.beacon = vrep.simxGetObjectHandle(
+                    self.clientID, "Beacon", vrep.simx_opmode_blocking)[1]
+
         # Setup robot handle
         self.handle = vrep.simxGetObjectHandle(
             self.clientID, name, vrep.simx_opmode_blocking)[1]
@@ -577,8 +578,8 @@ class Robot(threading.Thread):
         
 
         # Request streaming values
-        vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_streaming)
-        vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_streaming)
+        vrep.simxGetObjectPosition(self.clientID, self.right_motor, self.beacon, vrep.simx_opmode_streaming)
+        vrep.simxGetObjectPosition(self.clientID, self.left_motor, self.beacon, vrep.simx_opmode_streaming)
 
         vrep.simxReadProximitySensor(self.clientID,self.left_ultrasonic,vrep.simx_opmode_streaming)
         vrep.simxReadProximitySensor(self.clientID,self.mid_ultrasonic,vrep.simx_opmode_streaming)
@@ -615,9 +616,9 @@ class Robot(threading.Thread):
         return a tuple contating the coordinates (x,y,z) for the left motor joint in meters
         """
         
-        return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_buffer)
+        return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, self.beacon, vrep.simx_opmode_buffer)
         while (return_code == vrep.simx_return_novalue_flag):
-            return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, -1, vrep.simx_opmode_buffer)
+            return_code,pos = vrep.simxGetObjectPosition(self.clientID, self.left_motor, self.beacon, vrep.simx_opmode_buffer)
 
         if (return_code == vrep.simx_return_ok):
             return pos[0:2]
@@ -627,9 +628,9 @@ class Robot(threading.Thread):
         return a tuple contating the coordinates (x,y,z) for the right motor joint in meters
         """
        
-        return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_buffer)
+        return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, self.beacon, vrep.simx_opmode_buffer)
         while (return_code == vrep.simx_return_novalue_flag):
-            return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, -1, vrep.simx_opmode_buffer)
+            return_code,pos= vrep.simxGetObjectPosition(self.clientID, self.right_motor, self.beacon, vrep.simx_opmode_buffer)
 
         if (return_code == vrep.simx_return_ok):
             return pos[0:2]
