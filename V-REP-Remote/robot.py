@@ -150,7 +150,7 @@ class Robot(threading.Thread):
         if(base_velocity is None):
             base_velocity = self.SPEED
         angular_Kp = 10
-        angular_Ki = 0.3
+        angular_Ki = 0.7
         angular_Kd = 0.1
         e_1 = 0
         e_acc = 0
@@ -184,9 +184,10 @@ class Robot(threading.Thread):
             if(dt == 0):
                 continue
             u = angular_Kp*e + angular_Ki * (e_acc+e*dt) + angular_Kd * (e-e_1)/dt
+
             if ( math.isnan(u)):
                 pass
-            u = int(round(u))
+            # u = int(round(u))
             vLeft = base_velocity - u 
             vRight = base_velocity + u
             #Find the max and min of vLeft/vRight
@@ -198,8 +199,10 @@ class Robot(threading.Thread):
             elif (velMin < -Robot.MAX_VELOCITY):
                 vLeft -= (velMin + Robot.MAX_VELOCITY)
                 vRight -= (velMin + Robot.MAX_VELOCITY)
-            self.motor1(vLeft)
-            self.motor2(vRight)
+            # if(self.postfix):
+            #     print("Error in radians and input to controller and VLeft & VRight",e,u,vLeft,vRight)
+            self.motor1(abs(vLeft),vLeft>0)
+            self.motor2(abs(vRight),vRight>0)
             # print Robot.distance(x_g, y_g, self.pos_x, self.pos_y)
             if Robot.distance(x_g, y_g, self.pos_x, self.pos_y) < tolerance:
                 self.motor1(0)
