@@ -738,9 +738,9 @@ class Robot(threading.Thread):
         """
         if not isinstance(direction, bool):
             raise ValueError("Parameter direction must be boolean")
-        if not isinstance(value, int) and (value > 255 or value < 0):
+        if  (value > 255 or value < 0):
             raise ValueError(
-                "Parameter value must be integer between 0 and 255")
+                "Parameter value must be  between 0 and 255")
         if not direction:
             value = -value
         vrep.simxSetJointTargetVelocity(
