@@ -220,43 +220,6 @@ class Robot(threading.Thread):
                 return True
             self.update_odometry()
 
-    def go_to_point2(self, x_g, y_g, tolerance=0.01, us_check=True):
-        u_x = x_g - self.pos_x
-        u_y = y_g - self.pos_y
-        if not (abs(u_x) < 0.01 or abs(u_y) < 0.01):
-            theta_g = math.atan2(u_y, u_x)
-            self.go_to_angle(theta_g)
-        u_mag = Robot.distance(u_x, u_y, 0, 0)
-        self.motor1(self.SPEED)
-        self.motor2(self.SPEED)
-        start_x = self.pos_x
-        start_y = self.pos_y
-        if us_check:
-            ref_left_us = self.read_left_ultra_sonic()
-            if ref_left_us[0]:
-                ref_left_us = ref_left_us[1]
-            else:
-                us_check = False
-        while True:
-            covered = Robot.distance(self.pos_x, self.pos_y, start_x, start_y)
-            # print "u_mag = ", u_mag, "covered = ", covered
-            if abs(u_mag - covered) < tolerance:
-                self.motor1(0)
-                self.motor2(0)
-                return
-            if us_check:
-                left_us = self.read_left_ultra_sonic()
-                right_us = self.read_right_ultra_sonic()
-                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
-                    self.motor1(self.SPEED - 1)
-                    self.motor2(self.SPEED)
-                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED - 1)
-                else:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED)
-            self.update_odometry()
 
     def setup(self):
         """
