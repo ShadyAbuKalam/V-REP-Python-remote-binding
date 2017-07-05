@@ -1,3 +1,5 @@
+import operator
+
 import utils
 import vrep
 import threading
@@ -15,6 +17,7 @@ class Robot(threading.Thread):
     #Message types
     ROTATION_MESSAGE = 0
     END_OF_ARENA_MESSAGE = 1
+    ORDERING_MESSAGE = 2
     #Color
     RED = 0
     GREEN = 1
@@ -38,7 +41,8 @@ class Robot(threading.Thread):
     GRIPPING = 7
     DEPOSITING = 8
     OBSTACLE_HANDLING = 9
-    
+
+    STARTING_UP = 10
     # Physical properties
     ROBOT_LENGTH = 0.174
     ROBOT_WIDTH = 0.11
@@ -260,24 +264,17 @@ class Robot(threading.Thread):
         It must be called after the start of simulation from the app.py
         """
         self.isHead = False
-
+        self.isTail = False
+        self.SuccessorRobot = None
+        self.PredecessorRobot = None
+        #Starting up algorithm
+        self.robots = {}
+        self.starting_up_intiail_time = time.time()
+        self.state = Robot.STARTING_UP
         # Foraging variables
         self.foragin_motion = None
 
         self.gripper_state = Robot.EMPTY
-        if not self.postfix: # Must find  a way to replace resolve this issue
-            self.robot_ID = 0
-        else:
-            self.robot_ID = 1  # replaced later by distributed hash table code
-        if self.robot_ID == 0:
-            self.state = Robot.SCAN
-            self.isHead = True
-            print("A robot is a Head")
-
-        else:
-            self.state = Robot.FOLLOWER
-            self.isHead = False
-            print("A robot is a follower")
 
         # Follower algorithm state 
         self.next_follower_rotation = []
@@ -290,12 +287,39 @@ class Robot(threading.Thread):
         self.prev_right_pos = self.get_right_motor_coordinates()
         self.prev_left_pos = self.get_left_motor_coordinates()
 
-        
+        #Intial location for robots
+        self.update_odometry()
+
     def loop(self):
         """
         The analogy of loop() inside micro-controller,write your code inside
         """
-        if self.state == Robot.STOP:
+        if self.state == Robot.STARTING_UP:
+            if(time.time() - self.starting_up_intiail_time <5):
+                self.send_ordering_message()
+            else:
+                distance = Robot.distance(self.pos_x,self.pos_y,0,0)
+                self.robots[self.handle]= distance
+                sorted_robots = sorted(self.robots.items(), key=operator.itemgetter(1))
+                i  = sorted_robots.index((self.handle,distance))
+                print(sorted_robots)
+                if(i > 0):
+                    self.PredecessorRobot = sorted_robots[i - 1][0]
+                if(i<len(sorted_robots)-1):
+                    self.SuccessorRobot = sorted_robots[i + 1][0]
+
+                if(self.PredecessorRobot is None):
+                    self.isHead = True
+                if(self.SuccessorRobot is None):
+                    self.isTail = True
+
+                #todo : Shift to the next state according to the the position
+                if(self.isHead):
+                    self.state = Robot.SCAN
+                else:
+                    self.state = Robot.FOLLOWER
+
+        elif self.state == Robot.STOP:
             self.motor1(0)
             self.motor2(0)
             return
@@ -520,11 +544,9 @@ class Robot(threading.Thread):
         self.run_event = self.sim.run_event
         self.clientID = self.sim.clientID
         self.name = name
-        self.state = Robot.STOP
         self.SPEED = 20
-        self.robot_ID = 0
-        self.pos_x = 0
-        self.pos_y = 0
+        self.pos_x = None
+        self.pos_y = None
         self.theta = math.pi / 2
         self.prev_right_ticks = 0
         self.prev_left_ticks = 0
@@ -826,6 +848,10 @@ class Robot(threading.Thread):
             message = {'type': Robot.END_OF_ARENA_MESSAGE, 'data': None}
             self.broadcast(message)
 
+    def send_ordering_message(self):
+        distance = Robot.distance(self.pos_x,self.pos_y,0,0)
+        message = {'type': Robot.ORDERING_MESSAGE, 'data': {'handler': self.handle, 'distance': distance}}
+        self.broadcast(message)
     def process_messages(self):
         while (not self.message_queue.empty()):
             try:
@@ -836,6 +862,8 @@ class Robot(threading.Thread):
                 self.next_follower_rotation.append(message['data'])
             elif (message['type'] == Robot.END_OF_ARENA_MESSAGE):
                 self.state = Robot.STOP
+            elif (message['type'] == Robot.ORDERING_MESSAGE):
+                self.robots[message['data']['handler']] = message['data']['distance']
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
 
