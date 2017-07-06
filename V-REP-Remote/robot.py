@@ -5,7 +5,8 @@ import vrep
 import threading
 import time
 import math
-from Queue import Queue
+from Queue import Queue, Empty
+
 
 class Robot(threading.Thread):
 
@@ -825,7 +826,7 @@ class Robot(threading.Thread):
         while (not self.message_queue.empty()):
             try:
                 message = self.message_queue.get_nowait()
-            except Queue.Empty:
+            except Empty:
                 return
             if (message['type'] == Robot.ROTATION_MESSAGE):
                 self.next_follower_rotation.append(message['data'])
