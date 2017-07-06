@@ -794,10 +794,17 @@ class Robot(threading.Thread):
             self.clientID, self.GripperProxSensor, vrep.simx_opmode_blocking)
         if returnCode != vrep.simx_return_ok or detectionState is False:
             return False
-        self.__GrippedShape = detectedObjectHandle
-        returnCode = vrep.simxSetObjectParent(self.clientID, self.__GrippedShape,
-                                 self.GripperAttachPoint, True, vrep.simx_opmode_blocking)
-        return True if returnCode == vrep.simx_return_ok else False
+        returnCode = vrep.simxSetObjectParent(self.clientID, detectedObjectHandle,
+                                 self.GripperAttachPoint, False, vrep.simx_opmode_blocking)
+
+        if returnCode == vrep.simx_return_ok:
+            self.__GrippedShape = detectedObjectHandle
+            vrep.simxSetObjectPosition(self.clientID, detectedObjectHandle, self.GripperAttachPoint, (0, 0.01, 0.045),
+                                       vrep.simx_opmode_blocking)
+
+            return True
+        else:
+            return False
 
     def degrip(self):
 
