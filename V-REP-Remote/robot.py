@@ -19,6 +19,7 @@ class Robot(threading.Thread):
     ROTATION_MESSAGE = 0
     END_OF_ARENA_MESSAGE = 1
     ORDERING_MESSAGE = 2
+    DETACHING_MESSAGE = 3
     #Color
     RED = 0
     GREEN = 1
@@ -45,6 +46,7 @@ class Robot(threading.Thread):
     OBSTACLE_HANDLING = 9
 
     STARTING_UP = 10
+    DETACHING = 11
     # Physical properties
     ROBOT_LENGTH = 0.174
     ROBOT_WIDTH = 0.11
@@ -158,7 +160,8 @@ class Robot(threading.Thread):
             else:
                 self.update_odometry(l_dir=-1)
 
-    def go_to_point(self, x_g, y_g, tolerance=0.075,base_velocity=None):
+    def go_to_point(self, x_g, y_g, tolerance=0.075,base_velocity=None,avoidance = False):
+        self.go_to_point_target = (x_g,y_g)
         if(base_velocity is None):
             base_velocity = self.SPEED
         angular_Kp = 10
@@ -167,7 +170,7 @@ class Robot(threading.Thread):
         e_1 = 0
         e_acc = 0
         previous_time = time.time()-1
-
+        blending_alpha = 0.25
 
         u_x = x_g - self.pos_x
         u_y = y_g - self.pos_y
@@ -177,16 +180,62 @@ class Robot(threading.Thread):
             self.go_to_angle(theta_d)
 
         while True:
+            if avoidance:
+                left_distance = 0.4
+                left_us = self.read_left_ultra_sonic()
+                if left_us[0]:
+                    left_distance = left_us[1]
+                robot_frame_left_x = math.cos(math.pi / 4) * left_distance + 0.07
+                robot_frame_left_y = math.sin(math.pi / 4) * left_distance + 0.05
+                us_left_x = math.cos(self.theta) * robot_frame_left_x - math.sin(
+                    self.theta) * robot_frame_left_y + self.pos_x
+                us_left_y = math.sin(self.theta) * robot_frame_left_x + math.cos(
+                self.theta) * robot_frame_left_y + self.pos_y
 
-            if(self.state == Robot.FORAGE):
+                mid_distance = 0.4
                 mid_us = self.read_mid_ultra_sonic()
-                if(mid_us[0] and mid_us[1] <= 0.1):
-                    self.state= Robot.OBSTACLE_HANDLING
+                if mid_us [0]:
+                    mid_distance = mid_us[1]
+                robot_frame_mid_x = math.cos(0) * mid_distance + 0.08
+                robot_frame_mid_y = math.sin(0) * mid_distance + 0
+                us_mid_x = math.cos(self.theta) * robot_frame_mid_x - math.sin(
+                    self.theta) * robot_frame_mid_y + self.pos_x
+                us_mid_y = math.sin(self.theta) * robot_frame_mid_x + math.cos(self.theta) * robot_frame_mid_y + self.pos_y
+
+                right_distance =0.4
+                right_us = self.read_right_ultra_sonic()
+                if right_us[0]:
+                    right_distance = right_us[1]
+                robot_frame_right_x = math.cos(-math.pi / 4) * right_distance + 0.07
+                robot_frame_right_y = math.sin(-math.pi / 4) * right_distance - 0.05
+                us_right_x = math.cos(self.theta) * robot_frame_right_x - math.sin(
+                    self.theta) * robot_frame_right_y + self.pos_x
+                us_right_y = math.sin(self.theta) * robot_frame_right_x + math.cos(
+                    self.theta) * robot_frame_right_y + self.pos_y
+
+                self.motor1(0)
+                self.motor2(0)
+                if mid_distance < 0.1 or left_distance <0.1 or right_distance <0.1:
+                    blending_alpha = 0
+
+                elif left_distance == 0.4 and mid_distance == 0.4 and right_distance == 0.4:
+                    blending_alpha = 1
+                    e_acc = 0
+                    e_1 = 0
+                else:
+                    blending_alpha = 0.25
+
+                print(left_distance,mid_distance,right_distance,blending_alpha )
+                u_x = blending_alpha * (x_g - self.pos_x) + (1 - blending_alpha) * (us_left_x + 0.5* us_mid_x +  us_right_x - 2.5*self.pos_x)
+                u_y = blending_alpha * (y_g - self.pos_y) + (1 - blending_alpha) * ( us_left_y + 0.5* us_mid_y +  us_right_y - 2.5*self.pos_y)
+                theta_d = math.atan2(u_y, u_x)
+
+            if (self.state == Robot.FORAGE):
+                mid_us = self.read_mid_ultra_sonic()
+                if (mid_us[0] and mid_us[1] <= 0.20):
+                    self.state = Robot.OBSTACLE_HANDLING
                     return False
-                
-                    
-                    
-                
+
             e = theta_d - self.theta
             e = math.atan2(math.sin(e), math.cos(e))
 
@@ -255,6 +304,9 @@ class Robot(threading.Thread):
         #Intial location for robots
         self.update_odometry()
 
+        #Related to detach algorithm
+        self.go_to_point_target = None
+        self.foraging_target_point = None
     def loop(self):
         """
         The analogy of loop() inside micro-controller,write your code inside
@@ -363,21 +415,33 @@ class Robot(threading.Thread):
             self.state = Robot.FORAGE
             self.foragin_motion = Robot.DOWN
         elif self.state == Robot.FORAGE:
-            #Generic
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            if (self.foragin_motion == Robot.DOWN ):
-                if (not self.go_to_point(self.pos_x, self.pos_y - Robot.length_arena)):
-                    return
-            elif self.foragin_motion == Robot.UP:
-                if (not self.go_to_point(self.pos_x, self.pos_y + Robot.length_arena)):
-                    return
+            #If a follower was updated to be a head it may have previous rotation points
+            while(len(self.next_follower_rotation) > 0):
+                coord = self.next_follower_rotation.pop(0)
+                self.go_to_point(coord['x'],coord['y'])
+            if(self.foraging_target_point is not None):
+                if(self.go_to_point(self.foraging_target_point[0],self.foraging_target_point[1])):
+                    self.foraging_target_point = None
 
-            elif self.foragin_motion == Robot.LEFT:
-                if (not self.go_to_point(self.pos_x - Robot.width_arena, self.pos_y)):
-                    return
-            elif self.foragin_motion == Robot.RIGHT:
-                if (not self.go_to_point(self.pos_x + Robot.width_arena, self.pos_y)):
+            else:
+            #Generic
+                self.motor1(self.SPEED)
+                self.motor2(self.SPEED)
+                if (self.foragin_motion == Robot.DOWN ):
+                    self.foraging_target_point = (self.pos_x, self.pos_y - Robot.length_arena)
+
+                elif self.foragin_motion == Robot.UP:
+                    self.foraging_target_point = (self.pos_x, self.pos_y + Robot.length_arena)
+
+                elif self.foragin_motion == Robot.LEFT:
+                    self.foraging_target_point = (self.pos_x - Robot.width_arena, self.pos_y)
+
+                elif self.foragin_motion == Robot.RIGHT:
+                    self.foraging_target_point = (self.pos_x + Robot.width_arena, self.pos_y)
+
+                if(self.go_to_point(self.foraging_target_point[0],self.foraging_target_point[1])):
+                    self.foraging_target_point = None
+                else:
                     return
             stop = False
             if(self.foragin_motion == Robot.DOWN or self.foragin_motion == Robot.UP):
@@ -413,29 +477,35 @@ class Robot(threading.Thread):
                 self.foragin_motion = self.DOWN
     
         elif self.state == Robot.GRIPPING:
-            
-            mid_us = self.read_mid_ultra_sonic()
-            self.motor1(self.SPEED/10)
-            self.motor2(self.SPEED/10)
 
-            while  mid_us[1] > 0.08 :
-                mid_us = self.read_mid_ultra_sonic()
+            start_x = self.pos_x
+            start_y = self.pos_y
+            self.motor1(self.SPEED / 2)
+            self.motor2(self.SPEED / 2)
+            while Robot.distance(start_x,start_y,self.pos_x,self.pos_y) <0.1:
                 self.update_odometry()
 
             self.motor1(0)
             self.motor2(0)
+
+
             if (self.grip()):
-                self.state = Robot.DEPOSITING
-            else :
-                self.gripper_state = None
-                assert(False)  # It failed to grip
-                
+                self.state = Robot.DETACHING
+
+            # else :
+                # self.gripper_state = None
+                # assert(False)  # It failed to grip
+        elif self.state == Robot.DETACHING:
+            self.send_detach_message()
+            self.SuccessorRobot = None
+            self.PredecessorRobot = None
+            self.state = Robot.DEPOSITING
         elif self.state == Robot.DEPOSITING:
             if self.gripper_state == Robot.LIGHT:
-                self.go_to_point(0,-0.3)
+                self.go_to_point(0,-0.3,avoidance=True)
                 self.go_to_point(-0.5,-0.3)
             elif self.gripper_state == Robot.HEAVY:
-                self.go_to_point(1.6,-0.3)
+                self.go_to_point(1.6,-0.3,avoidance=True)
                 self.go_to_point(2,-0.3)
                                 
             self.degrip()
@@ -444,8 +514,8 @@ class Robot(threading.Thread):
         elif self.state == Robot.OBSTACLE_HANDLING:
             self.motor1(0)
             self.motor2(0)
-            color_sesnor_reading = self.read_color_sensor()
-            color = self.analyze_color(color_sesnor_reading)
+            color_sensor_reading = self.read_color_sensor()
+            color = self.analyze_color(color_sensor_reading)
             if (color == Robot.GREEN ):
                 self.state = Robot.GRIPPING
                 self.gripper_state = Robot.HEAVY
@@ -455,7 +525,7 @@ class Robot(threading.Thread):
                 self.state = Robot.GRIPPING
 
             else:
-                self.state = Robot.STOP
+                self.state = Robot.FORAGE
 
         elif self.state == Robot.FOLLOWER:
             isObj_m,Dist_m=self.read_mid_ultra_sonic()
@@ -465,13 +535,14 @@ class Robot(threading.Thread):
                 print "Robot will rotate according to message"
                 self.motor1(0)
                 self.motor2(0)
-                coord= self.next_follower_rotation.pop(0)
+                coord= self.next_follower_rotation[0]
                 print "Coord",coord,self.pos_x,self.pos_y
                 self.go_to_point(coord['x'],coord['y'],tolerance=0.01)
                 print "Follower is rotating"
                 theta = utils.limitToOneOfPoles(self.theta)
 
                 self.go_to_angle(theta-math.pi/2)
+                self.next_follower_rotation.pop(0)
             elif ((Dist_m is not None) and  (Dist_r is None)):##straight Motion :
 
                 if(Dist_m>=0.29):
@@ -829,6 +900,12 @@ class Robot(threading.Thread):
         distance = Robot.distance(self.pos_x,self.pos_y,0,0)
         message = {'type': Robot.ORDERING_MESSAGE, 'data': {'handler': self.handle, 'distance': distance}}
         self.broadcast(message)
+
+    def send_detach_message(self):
+        message = {'type': Robot.DETACHING_MESSAGE, 'data': {'coordinates':(self.go_to_point_target),'direction':self.foragin_motion},'target':self.SuccessorRobot
+                   }
+        self.broadcast(message)
+
     def process_messages(self):
         while (not self.message_queue.empty()):
             try:
@@ -841,6 +918,14 @@ class Robot(threading.Thread):
                 self.state = Robot.STOP
             elif (message['type'] == Robot.ORDERING_MESSAGE):
                 self.robots[message['data']['handler']] = message['data']['distance']
+            elif (message['type'] == Robot.DETACHING_MESSAGE):
+                if(message['target'] != self.handle):
+                    return
+                self.PredecessorRobot = None
+                self.state = Robot.FORAGE
+                self.foraging_target_point = message['data']['coordinates']
+                self.foragin_motion = message['data']['direction']
+
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
 
