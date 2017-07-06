@@ -23,6 +23,7 @@ class Robot(threading.Thread):
     GREEN = 1
     BLUE = 2
     BLACK = 3
+    WHITE = 4
 
     MAX_VELOCITY = 100
     #Gripper state
@@ -738,7 +739,11 @@ class Robot(threading.Thread):
         if(color is None):
             return None
         rgb = color[1:]
+
         errors = {}
+        w_error = math.sqrt((255-rgb[0])**2 + (255-rgb[1])**2 + (255-rgb[2])**2)
+        if(w_error < 80):
+            return None
         r_error = math.sqrt((255-rgb[0])**2 + rgb[1]**2 + rgb[2]**2)
         errors[Robot.RED] = r_error
 
@@ -758,10 +763,11 @@ class Robot(threading.Thread):
         This function returns a list of 4 values: light intensity, red, green, blue averges across the pixels of the detector in case of success,
         these values range from 0-255. Or it returns None in case of faliures
         """
-        
         result = vrep.simxReadVisionSensor(
                 self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
-
+        while result[0] == vrep.simx_return_novalue_flag:
+            result = vrep.simxReadVisionSensor(
+                self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
         if result[0] != vrep.simx_return_ok:
             return None
 
