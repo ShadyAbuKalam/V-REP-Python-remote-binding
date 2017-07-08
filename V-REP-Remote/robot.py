@@ -297,6 +297,10 @@ class Robot(threading.Thread):
         #Related to detach algorithm
         self.go_to_point_target = None
         self.foraging_target_point = None
+
+        #Exit point
+        self.exit_point = None
+
     def loop(self):
         """
         The analogy of loop() inside micro-controller,write your code inside
@@ -310,6 +314,8 @@ class Robot(threading.Thread):
                 sorted_robots = sorted(self.robots.items(), key=operator.itemgetter(1))
                 i  = sorted_robots.index((self.handle,distance))
                 print(sorted_robots)
+                self.exit_point = (0,-1.5-(len(sorted_robots) - i -1)*0.4)
+
                 if(i > 0):
                     self.PredecessorRobot = sorted_robots[i - 1][0]
                 if(i<len(sorted_robots)-1):
@@ -330,9 +336,7 @@ class Robot(threading.Thread):
             self.brake()
             return
         elif self.state == Robot.EXIT:
-            # self.go_to_point(0, -0.3)
-            self.motor1(0)
-            self.motor2(0)
+            self.go_to_point(*self.exit_point)
             self.state = Robot.STOP
             return
         elif self.state == Robot.SCAN:
