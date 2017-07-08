@@ -476,12 +476,17 @@ class Robot(threading.Thread):
             if self.gripper_state == Robot.LIGHT:
                 self.go_to_point(0,-0.3,avoidance=True)
                 self.go_to_point(-0.5,-0.3)
+                self.degrip()
+                self.go_to_point(0,-0.3)
+
             elif self.gripper_state == Robot.HEAVY:
                 self.go_to_point(1.6,-0.3,avoidance=True)
                 self.go_to_point(2,-0.3)
+                self.degrip()
+                self.go_to_point(1.6,-0.3)
+
                                 
-            self.degrip()
-            self.state = Robot.STOP
+            self.state = Robot.EXIT
 
         elif self.state == Robot.OBSTACLE_HANDLING:
             self.brake()
