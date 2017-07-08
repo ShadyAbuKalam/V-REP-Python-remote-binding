@@ -172,7 +172,8 @@ class Robot(threading.Thread):
         u_y = y_g - self.pos_y
         theta_d = math.atan2(u_y, u_x)
 
-        if not (abs(u_x) < 0.01 or abs(u_y) < 0.01):
+
+        if not (math.sqrt(u_x**2 + u_y**2)< 0.05 ):
             self.go_to_angle(theta_d)
 
         while True:
