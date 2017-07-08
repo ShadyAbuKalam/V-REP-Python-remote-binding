@@ -396,11 +396,11 @@ class Robot(threading.Thread):
             if(self.foraging_target_point is not None):
                 if(self.go_to_point(self.foraging_target_point[0],self.foraging_target_point[1])):
                     self.foraging_target_point = None
+                else:
+                    return
 
             else:
-            #Generic
-                self.motor1(self.SPEED)
-                self.motor2(self.SPEED)
+
                 if (self.foragin_motion == Robot.DOWN ):
                     self.foraging_target_point = (self.pos_x, self.pos_y - Robot.length_arena)
 
