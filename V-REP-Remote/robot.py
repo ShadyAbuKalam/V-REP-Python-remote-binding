@@ -341,70 +341,50 @@ class Robot(threading.Thread):
             return
         elif self.state == Robot.SCAN:
 
-            start_x = self.pos_x
-            start_y = self.pos_y
-            ref_left_us = False
-            while (not ref_left_us):
-                ref_left_us = self.read_left_ultra_sonic()[1]
-            
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            while True:
-                left_us = self.read_left_ultra_sonic()
-                mid_us = self.read_mid_ultra_sonic()
-                right_us = self.read_right_ultra_sonic()
-                if left_us[0] and mid_us[0] and right_us[0] and mid_us[1] < 0.15:
-                    self.motor1(0)
-                    self.motor2(0)
-                    end_x = self.pos_x
-                    end_y = self.pos_y
-                    Robot.length_arena = Robot.distance(end_x, end_y, start_x, start_y)
-                    break
-                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
-                    self.motor1(self.SPEED-1)
-                    self.motor2(self.SPEED)
-                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED-1)
-                else:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED)
-                self.update_odometry()
-            theta_d = self.theta - math.pi / 2
-            theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
-            self.send_rotation_message()
-            self.go_to_angle(theta_d, tolerance=0.015)
-            self.motor1(self.SPEED)
-            self.motor2(self.SPEED)
-            start_x = self.pos_x
-            start_y = self.pos_y
-            ref_left_us = self.read_left_ultra_sonic()[1]
-            while True:
-                left_us = self.read_left_ultra_sonic()
-                mid_us = self.read_mid_ultra_sonic()
-                right_us = self.read_right_ultra_sonic()
-                if left_us[0] and mid_us[0] and right_us[0] and mid_us[1] < 0.15:
-                    self.motor1(0)
-                    self.motor2(0)
-                    end_x = self.pos_x
-                    end_y = self.pos_y
-                    Robot.width_arena = Robot.distance(end_x, end_y, start_x, start_y)
-                    break
-                if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
-                    self.motor1(self.SPEED - 1)
-                    self.motor2(self.SPEED)
-                elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED - 1)
-                else:
-                    self.motor1(self.SPEED)
-                    self.motor2(self.SPEED)
-                self.update_odometry()
-            theta_d = self.theta - math.pi / 2
-            theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
-            self.send_rotation_message()
+            for i in range(2):
+                reached_wall = False
+                start_x = self.pos_x
+                start_y = self.pos_y
+                end_x = None
+                end_y = None
+                ref_left_us = False
+                while (not ref_left_us):
+                    ref_left_us = self.read_left_ultra_sonic()[1]
+                while reached_wall == False:
+                    left_us = self.read_left_ultra_sonic()
+                    mid_us = self.read_mid_ultra_sonic()
+                    right_us = self.read_right_ultra_sonic()
+                    if left_us[0] and mid_us[0] and right_us[0] and mid_us[1] < 0.15:
+                        v_right,v_left = self.__convert_unicycle_to_differential(0)
 
-            self.go_to_angle(theta_d, tolerance=0.01)
+                        end_x = self.pos_x
+                        end_y = self.pos_y
+                        reached_wall = True
+
+                    if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
+                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, 0.1)
+
+                    elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
+                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, -0.1)
+
+                    else:
+                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED)
+
+                    self.motor1(v_left)
+                    self.motor2(v_right)
+                    self.update_odometry()
+
+                if i == 0:
+                    Robot.length_arena = Robot.distance(end_x, end_y, start_x, start_y)
+                else:
+                    Robot.width_arena = Robot.distance(end_x, end_y, start_x, start_y)
+
+                theta_d = self.theta - math.pi / 2
+                theta_d = math.atan2(math.sin(theta_d), math.cos(theta_d))
+                self.send_rotation_message()
+                self.go_to_angle(theta_d, tolerance=0.015)
+
+
             self.state = Robot.FORAGE
             self.foragin_motion = Robot.DOWN
         elif self.state == Robot.FORAGE:
@@ -662,17 +642,17 @@ class Robot(threading.Thread):
         """
         self.sim.broadcast(self, message)
 
-    def motor1(self, value, direction=True):
+    def motor1(self, value):
         """
         Sets the motor1 speed proportional to value and the forward/backward direction
         """
-        self.__set_motor(self.left_motor, value, direction)
+        self.__set_motor(self.left_motor, value)
 
-    def motor2(self, value, direction=True):
+    def motor2(self, value):
         """
         Sets the motor1 speed proportional to value and the forward/backward direction
         """
-        self.__set_motor(self.right_motor, value, direction)
+        self.__set_motor(self.right_motor, value)
 
     def get_left_motor_coordinates(self):
         """
@@ -766,17 +746,15 @@ class Robot(threading.Thread):
                 self.__right_motor_old_position = (self.__right_motor_old_position - delta_ticks * (
                     2 * math.pi / Robot.TICKS_PER_REVOLUTION)) % (2 * math.pi)
 
-    def __set_motor(self, motor_handle, value, direction):
+    def __set_motor(self, motor_handle, value):
         """
         Sets the motor speed proportional to value and the forward/backward direction
         """
-        if not isinstance(direction, bool):
-            raise ValueError("Parameter direction must be boolean")
-        if  (value > 255 or value < 0):
+
+        if abs(value)> 255:
             raise ValueError(
-                "Parameter value must be  between 0 and 255")
-        if not direction:
-            value = -value
+                "Parameter value must be  between 0 and 255, but {0} was passed".format(value))
+
         vrep.simxSetJointTargetVelocity(
             self.clientID, motor_handle, value * .1,
             vrep.simx_opmode_oneshot)
