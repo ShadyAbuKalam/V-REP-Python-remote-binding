@@ -136,24 +136,20 @@ class Robot(threading.Thread):
             if(dt <= 0.001):
                 continue
             u = Kp*e + Ki * (e_acc+e*dt) + Kd * (e-e_1)/dt
-            # u = int(round(u))
-            # if(self.postfix):
-            #     print "Inside go to angle loop with u =",u
-            cc = u < 0
-            u = abs(u)
-            
+            v_right, v_left = self.__convert_unicycle_to_differential(0,u)
+
+
             # print "Error in rad %s and U = %s , CC = %s" % (e,u,cc)
 
             e_1 = e
             e_acc += e*dt
             previous_time=c_time
-            if(abs(u)>255):
-                u = 255 # Sometimes for unknown reasons u get values in order of thousands, so it's an odd ball solution
-            self.motor1(u,cc)
-            self.motor2(u,not cc)
+            # if(abs(u)>255):
+            #     u = 255 # Sometimes for unknown reasons u get values in order of thousands, so it's an odd ball solution
+            self.motor1(v_left)
+            self.motor2(v_right)
             if abs(e) < tolerance:
-                self.motor1(0)
-                self.motor2(0)
+                self.brake()
                 return
             if cc:
                 self.update_odometry(r_dir=-1)
@@ -213,8 +209,7 @@ class Robot(threading.Thread):
                 us_right_y = math.sin(self.theta) * robot_frame_right_x + math.cos(
                     self.theta) * robot_frame_right_y + self.pos_y
 
-                self.motor1(0)
-                self.motor2(0)
+                self.brake()
                 if mid_distance < 0.1 or left_distance <0.1 or right_distance <0.1:
                     blending_alpha = 0
 
@@ -246,11 +241,8 @@ class Robot(threading.Thread):
                 continue
             u = angular_Kp*e + angular_Ki * (e_acc+e*dt) + angular_Kd * (e-e_1)/dt
 
-            if ( math.isnan(u)):
-                pass
-            # u = int(round(u))
-            vLeft = base_velocity - u 
-            vRight = base_velocity + u
+            vRight, vLeft = self.__convert_unicycle_to_differential(base_velocity,u)
+
             #Find the max and min of vLeft/vRight
             velMax = max(vLeft, vRight)
             velMin = min(vLeft, vRight)
@@ -262,12 +254,11 @@ class Robot(threading.Thread):
                 vRight -= (velMin + Robot.MAX_VELOCITY)
             # if(self.postfix):
             #     print("Error in radians and input to controller and VLeft & VRight",e,u,vLeft,vRight)
-            self.motor1(abs(vLeft),vLeft>0)
-            self.motor2(abs(vRight),vRight>0)
+            self.motor1(vLeft)
+            self.motor2(vRight)
             # print Robot.distance(x_g, y_g, self.pos_x, self.pos_y)
             if Robot.distance(x_g, y_g, self.pos_x, self.pos_y) < tolerance:
-                self.motor1(0)
-                self.motor2(0)
+                self.brake()
                 return True
             self.update_odometry()
 
@@ -294,8 +285,7 @@ class Robot(threading.Thread):
         self.next_follower_rotation = []
 
         #Reset old values for speed saved in simulator from the last simulation pass
-        self.motor1(0)
-        self.motor2(0)
+        self.brake()
 
         #Initialize these two important variables :D 
         self.prev_right_pos = self.get_right_motor_coordinates()
@@ -337,8 +327,7 @@ class Robot(threading.Thread):
                     self.state = Robot.FOLLOWER
 
         elif self.state == Robot.STOP:
-            self.motor1(0)
-            self.motor2(0)
+            self.brake()
             return
         elif self.state == Robot.EXIT:
             # self.go_to_point(0, -0.3)
@@ -454,8 +443,7 @@ class Robot(threading.Thread):
                 Robot.length_arena -= Robot.DISTANCE_DECREMENT
                 stop= Robot.length_arena <= Robot.FORAGING_STOP_DISTANCE
             if stop:
-                self.motor1(0)
-                self.motor2(0)
+                self.brake()
                 self.theta = - math.pi / 2
                 self.state = Robot.EXIT
                 self.send_end_of_arena_message()
@@ -480,13 +468,13 @@ class Robot(threading.Thread):
 
             start_x = self.pos_x
             start_y = self.pos_y
-            self.motor1(self.SPEED / 2)
-            self.motor2(self.SPEED / 2)
+            velocity = self.__convert_unicycle_to_differential(self.SPEED/2)[0]
+            self.motor1(velocity)
+            self.motor2(velocity)
             while Robot.distance(start_x,start_y,self.pos_x,self.pos_y) <0.1:
                 self.update_odometry()
 
-            self.motor1(0)
-            self.motor2(0)
+            self.brake()
 
 
             if (self.grip()):
@@ -512,8 +500,7 @@ class Robot(threading.Thread):
             self.state = Robot.STOP
 
         elif self.state == Robot.OBSTACLE_HANDLING:
-            self.motor1(0)
-            self.motor2(0)
+            self.brake()
             color_sensor_reading = self.read_color_sensor()
             color = self.analyze_color(color_sensor_reading)
             if (color == Robot.GREEN ):
@@ -533,8 +520,7 @@ class Robot(threading.Thread):
             isObj_r,Dist_r=self.read_right_ultra_sonic()
             if(len(self.next_follower_rotation) > 0 and Robot.distance(self.pos_x,self.pos_y,self.next_follower_rotation[0]['x'],self.next_follower_rotation[0]['y']) <0.25):
                 print "Robot will rotate according to message"
-                self.motor1(0)
-                self.motor2(0)
+                self.brake()
                 coord= self.next_follower_rotation[0]
                 print "Coord",coord,self.pos_x,self.pos_y
                 self.go_to_point(coord['x'],coord['y'],tolerance=0.01)
@@ -563,16 +549,21 @@ class Robot(threading.Thread):
                     self.go_to_point(x,y)
                     
                 elif(Dist_m<=0.2):
-                    self.motor1(0,True)
-                    self.motor2(0,True)
+                    self.brake()
             
 
             elif Dist_m is None:
-                self.motor1(self.SPEED*2)
-                self.motor2(self.SPEED*2)
+                vRight,vLeft = self.__convert_unicycle_to_differential(self.SPEED*2,0)
+                self.motor1(vRight)
+                self.motor2(vLeft)
 
 
         self.update_odometry()
+
+    def brake(self):
+        self.motor1(0)
+        self.motor2(0)
+
     def __init__(self, name, sim):
         threading.Thread.__init__(self)
         self.message_queue = Queue()  # Queue for received messages
@@ -580,7 +571,7 @@ class Robot(threading.Thread):
         self.run_event = self.sim.run_event
         self.clientID = self.sim.clientID
         self.name = name
-        self.SPEED = 20
+        self.SPEED = 1.0
         self.pos_x = None
         self.pos_y = None
         self.theta = math.pi / 2
@@ -925,6 +916,13 @@ class Robot(threading.Thread):
                 self.state = Robot.FORAGE
                 self.foraging_target_point = message['data']['coordinates']
                 self.foragin_motion = message['data']['direction']
+
+
+    def __convert_unicycle_to_differential(self,v,w=0):
+        vRight = (2*v+w*Robot.WHEEL_L) / (2*Robot.WHEEL_R)
+        vLeft = (2*v-w*Robot.WHEEL_L) / (2*Robot.WHEEL_R)
+        print ("Converted V = {0} & W = {1} to VRight= {2} & Vleft = {3}".format(v,w,vRight,vLeft))
+        return vRight,vLeft
 
     def __repr__(self):
         return "A Robot with handle : {0}".format(self.handle)
