@@ -463,11 +463,15 @@ class Robot(threading.Thread):
 
             self.brake()
 
+            trials = 5
+            while trials > 0:
+                if (self.grip()):
+                    self.state = Robot.DETACHING
+                    break
+                else:
+                    trials -=1
 
-            if (self.grip()):
-                self.state = Robot.DETACHING
-
-            # else :
+                # else :
                 # self.gripper_state = None
                 # assert(False)  # It failed to grip
         elif self.state == Robot.DETACHING:
@@ -817,16 +821,19 @@ class Robot(threading.Thread):
         This function returns a list of 4 values: light intensity, red, green, blue averges across the pixels of the detector in case of success,
         these values range from 0-255. Or it returns None in case of faliures
         """
-        result = vrep.simxReadVisionSensor(
-                self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
-        while result[0] == vrep.simx_return_novalue_flag:
+        try:
             result = vrep.simxReadVisionSensor(
-                self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
-        if result[0] != vrep.simx_return_ok:
-            return None
+                    self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
+            while result[0] == vrep.simx_return_novalue_flag:
+                result = vrep.simxReadVisionSensor(
+                    self.clientID, self.color_sensor, vrep.simx_opmode_blocking)
+            if result[0] != vrep.simx_return_ok:
+                return None
 
-        result = [e * 255 for e in result[2][0][10:14]]
-        return result
+            result = [e * 255 for e in result[2][0][10:14]]
+            return result
+        except Exception:
+            return  None
 
     def grip(self):
         """
@@ -852,9 +859,12 @@ class Robot(threading.Thread):
 
         if returnCode == vrep.simx_return_ok:
             self.__GrippedShape = detectedObjectHandle
-            vrep.simxSetObjectPosition(self.clientID, detectedObjectHandle, self.GripperAttachPoint, (0, 0.01, 0.045),
+            returnCode = vrep.simxSetObjectPosition(self.clientID, detectedObjectHandle, self.GripperAttachPoint, (0, 0.01, 0.045),
                                        vrep.simx_opmode_blocking)
-
+            while returnCode !=  vrep.simx_return_ok:
+                returnCode = vrep.simxSetObjectPosition(self.clientID, detectedObjectHandle, self.GripperAttachPoint,
+                                                        (0, 0.01, 0.045),
+                                                        vrep.simx_opmode_blocking)
             return True
         else:
             return False
