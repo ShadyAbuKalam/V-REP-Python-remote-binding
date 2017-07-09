@@ -313,7 +313,7 @@ class Robot(threading.Thread):
                 sorted_robots = sorted(self.robots.items(), key=operator.itemgetter(1))
                 i  = sorted_robots.index((self.handle,distance))
                 print(sorted_robots)
-                self.exit_point = (0,-1.5-(len(sorted_robots) - i -1)*0.4)
+                self.exit_point = (0+(len(sorted_robots) - i -1)*0.4,-1)
 
                 if(i > 0):
                     self.PredecessorRobot = sorted_robots[i - 1][0]
@@ -335,7 +335,8 @@ class Robot(threading.Thread):
             self.brake()
             return
         elif self.state == Robot.EXIT:
-            self.go_to_point(*self.exit_point)
+            self.go_to_point(*self.exit_point,avoidance= True)
+            self.go_to_angle(math.pi/2)
             self.state = Robot.STOP
             return
         elif self.state == Robot.SCAN:
@@ -361,10 +362,10 @@ class Robot(threading.Thread):
                         reached_wall = True
 
                     if left_us[0] and not right_us[0] and left_us[1] > ref_left_us + 0.01:
-                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, 0.1)
+                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, 0.2)
 
                     elif left_us[0] and not right_us[0] and left_us[1] < ref_left_us - 0.01:
-                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, -0.1)
+                        v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED, -0.2)
 
                     else:
                         v_right,v_left = self.__convert_unicycle_to_differential(self.SPEED)
