@@ -811,7 +811,8 @@ class Robot(threading.Thread):
         if(color is None):
             return None
         rgb = color[1:]
-
+        if(len(rgb) !=3): #Sometimes it fails to have 3 readings
+            return  None
         errors = {}
         w_error = math.sqrt((255-rgb[0])**2 + (255-rgb[1])**2 + (255-rgb[2])**2)
         if(w_error < 80):
@@ -936,7 +937,7 @@ class Robot(threading.Thread):
     def __convert_unicycle_to_differential(self,v,w=0):
         vRight = (2*v+w*Robot.WHEEL_L) / (2*Robot.WHEEL_R)
         vLeft = (2*v-w*Robot.WHEEL_L) / (2*Robot.WHEEL_R)
-        print ("Converted V = {0} & W = {1} to VRight= {2} & Vleft = {3}".format(v,w,vRight,vLeft))
+        # print ("Converted V = {0} & W = {1} to VRight= {2} & Vleft = {3}".format(v,w,vRight,vLeft))
         return vRight,vLeft
 
     def __repr__(self):
