@@ -1,11 +1,11 @@
 import operator
+from queue import Queue
 
 import utils
 import vrep
 import threading
 import time
 import math
-from Queue import Queue, Empty
 
 
 class Robot(threading.Thread):
@@ -67,11 +67,11 @@ class Robot(threading.Thread):
         return math.sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2))
 
     def print_ultrasonic_values(self):
-        print "---------------------------------------------------"
-        print "left = {0}".format(self.read_left_ultra_sonic())
-        print "mid = {0}".format(self.read_mid_ultra_sonic())
-        print "right = {0}".format(self.read_right_ultra_sonic())
-        print "---------------------------------------------------"
+        print("---------------------------------------------------")
+        print("left = {0}".format(self.read_left_ultra_sonic()))
+        print("mid = {0}".format(self.read_mid_ultra_sonic()))
+        print("right = {0}".format(self.read_right_ultra_sonic()))
+        print("---------------------------------------------------")
 
     def update_odometry(self, r_dir=1, l_dir=1):
         # print("X = {0}, Y = {1}, Theta = {2}".format(self.pos_x,self.pos_y,self.theta))
@@ -114,9 +114,7 @@ class Robot(threading.Thread):
 
         if( abs(theta_d - self.theta) < tolerance):
             return
-        print "Target theta is %s" % theta_d
-
-
+        print("Target theta is %s" % theta_d)
 
         Kp = 10
         Ki = 0.8
@@ -509,12 +507,12 @@ class Robot(threading.Thread):
             isObj_l,Dist_l=self.read_left_ultra_sonic()
             isObj_r,Dist_r=self.read_right_ultra_sonic()
             if(len(self.next_follower_rotation) > 0 and Robot.distance(self.pos_x,self.pos_y,self.next_follower_rotation[0]['x'],self.next_follower_rotation[0]['y']) <0.25):
-                print "Robot will rotate according to message"
+                print("Robot will rotate according to message")
                 self.brake()
                 coord= self.next_follower_rotation[0]
-                print "Coord",coord,self.pos_x,self.pos_y
+                print("Coord", coord, self.pos_x, self.pos_y)
                 self.go_to_point(coord['x'],coord['y'],tolerance=0.01)
-                print "Follower is rotating"
+                print("Follower is rotating")
                 theta = utils.limitToOneOfPoles(self.theta)
 
                 self.go_to_angle(theta-math.pi/2)
