@@ -645,8 +645,9 @@ class Robot(threading.Thread):
             # self.__calculate_ticks()
             self.process_messages()
             self.loop()
+            # print ("Robot {0}: in state {1}".format(threading.currentThread().name,self.state))
             # Sleep so other threads can be scheduled
-            time.sleep(0.1)
+            time.sleep(0.01)
 
     def broadcast(self, message):
         """
