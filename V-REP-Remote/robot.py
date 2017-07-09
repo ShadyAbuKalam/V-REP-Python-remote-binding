@@ -144,6 +144,9 @@ class Robot(threading.Thread):
             previous_time=c_time
             # if(abs(u)>255):
             #     u = 255 # Sometimes for unknown reasons u get values in order of thousands, so it's an odd ball solution
+            if(abs(v_left)>255 or abs(v_right)>255 ):
+                v_left = 200
+                v_right = 200
             self.motor1(v_left)
             self.motor2(v_right)
             if abs(e) < tolerance:
@@ -219,7 +222,7 @@ class Robot(threading.Thread):
                 else:
                     blending_alpha = 0.25
 
-                print(left_distance,mid_distance,right_distance,blending_alpha )
+                # print(left_distance,mid_distance,right_distance,blending_alpha )
                 u_x = blending_alpha * (x_g - self.pos_x) + (1 - blending_alpha) * (us_left_x + 0.5* us_mid_x +  us_right_x - 2.5*self.pos_x)
                 u_y = blending_alpha * (y_g - self.pos_y) + (1 - blending_alpha) * ( us_left_y + 0.5* us_mid_y +  us_right_y - 2.5*self.pos_y)
                 theta_d = math.atan2(u_y, u_x)
@@ -756,9 +759,10 @@ class Robot(threading.Thread):
         Sets the motor speed proportional to value and the forward/backward direction
         """
 
-        if abs(value)> 255:
-            raise ValueError(
-                "Parameter value must be  between 0 and 255, but {0} was passed".format(value))
+        if value > 255:
+            value = 255
+        elif value < -255:
+            value = -255
 
         vrep.simxSetJointTargetVelocity(
             self.clientID, motor_handle, value * .1,
