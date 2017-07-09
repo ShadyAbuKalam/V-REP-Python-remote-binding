@@ -211,7 +211,20 @@ class Robot(threading.Thread):
                 us_right_y = math.sin(self.theta) * robot_frame_right_x + math.cos(
                     self.theta) * robot_frame_right_y + self.pos_y
 
-                self.brake()
+                if(left_distance<0.25 or mid_distance < 0.25):
+                    while self.read_left_ultra_sonic()[0] or self.read_mid_ultra_sonic()[0]:
+                        v_right,v_left = self.__convert_unicycle_to_differential(0,-math.pi)
+                        self.motor1(v_left)
+                        self.motor2(v_right)
+                    self.update_odometry()
+                    L = 0.1
+                    y = L * math.sin(self.theta) + self.pos_y
+                    x = L * math.cos(self.theta) + self.pos_x
+
+                    self.go_to_point(x, y, base_velocity=self.SPEED /1)
+                    self.brake()
+                    continue
+
                 if mid_distance < 0.1 or left_distance <0.1 or right_distance <0.1:
                     blending_alpha = 0
 
